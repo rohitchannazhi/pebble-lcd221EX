@@ -572,20 +572,20 @@ static void apply_backlight(void) {
 // Screen layout (Pebble Time 2, 200x228): a black case with a white "LCD" panel
 // running edge to edge, a top bezel above it and a bottom bezel below.
 #define LCD_X 0
-#define LCD_Y 28    // leaves the top bezel tall enough for its Gothic 24 text
+#define LCD_Y 24
 #define LCD_W 200
-#define LCD_H 172
+#define LCD_H 176
 
 // Row 1: weekday (left) and the 2x2 indicator box (right).
 #define WEEKDAY_X 12
 #define WEEKDAY_NARROW_X 6  // the narrowed weekday, followed by the day of the month
-#define WEEKDAY_Y 36
+#define WEEKDAY_Y 34
 #define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
 #define BOX_RIGHT 191   // indicator box, right outer line
 #define BOX_DIV 152     // indicator box, vertical divider (off-centre: the left column has MUTE, the widest)
-#define BOX_TOP 36      // indicator box, top outer line (= weekday top)
-#define BOX_BOTTOM 64   // indicator box, bottom outer line (= weekday bottom)
-#define BOX_MID 50      // indicator box, middle divider
+#define BOX_TOP 34      // indicator box, top outer line (= weekday top)
+#define BOX_BOTTOM 62   // indicator box, bottom outer line (= weekday bottom)
+#define BOX_MID 48      // indicator box, middle divider
 #define BOX_RADIUS 6    // indicator box, radius of the rounded corners
 #define LABEL_H 10      // indicator label height in rows
 
@@ -618,9 +618,7 @@ static void apply_backlight(void) {
 #define TEMP_DEG_X 188
 
 // Bezels.
-#define TOP_RIGHT_MAX 124  // widest the top-right bezel text may be
-#define TOP_CAP 6          // top of the top bezel's 14px capitals (centred in the bezel)
-#define BEZEL_MARGIN 6     // the top bezel texts' distance from the screen edges, and from each other
+#define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
 #define BOTTOM_CAP 208     // top of the bottom bezel's 14px capitals (centred in the bezel)
 
 static const char *const DAYS[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
@@ -1037,12 +1035,10 @@ static void draw_lcd(void) {
   else draw_temperature();
 }
 
-// Top bezel (Gothic 24 bold, like the bottom bezel): the battery level and step count, or
-// the custom texts when those are switched off. The right text takes the width it needs (up
-// to TOP_RIGHT_MAX) and the left text gets the rest. When the battery level doesn't fit
-// there, it drops the word "BATT" rather than being cut short.
+// Top bezel (smaller Gothic 18 bold font): the battery level and step count, or
+// the custom texts when those are switched off. The right text takes the width
+// it needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
 static void draw_top_bezel(GContext *ctx) {
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   char left[24], right[24];
   if (s_settings.show_battery) {
     snprintf(left, sizeof(left), "BATT %d%%", s_battery.charge_percent);
@@ -1058,18 +1054,12 @@ static void draw_top_bezel(GContext *ctx) {
   } else {
     snprintf(right, sizeof(right), "-- STEPS");
   }
-  const GRect measure = GRect(0, 0, PBL_DISPLAY_WIDTH, 30);
-  int right_w = graphics_text_layout_get_content_size(right, font, measure,
-      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 2;
+  int right_w = graphics_text_layout_get_content_size(
+      right, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0, 0, 190, 22),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 4;
   if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
-  const int left_w = PBL_DISPLAY_WIDTH - right_w - 3 * BEZEL_MARGIN;
-  if (s_settings.show_battery && graphics_text_layout_get_content_size(left, font, measure,
-          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w > left_w) {
-    snprintf(left, sizeof(left), "%d%%", s_battery.charge_percent);
-  }
-  draw_bezel_text(ctx, right, PBL_DISPLAY_WIDTH - BEZEL_MARGIN - right_w, TOP_CAP, right_w,
-                  GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
-  draw_bezel_text(ctx, left, BEZEL_MARGIN, TOP_CAP, left_w, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  draw_text(ctx, right, GRect(190 - right_w, -2, right_w, 22), GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
+  draw_text(ctx, left, GRect(10, -2, 190 - right_w - 14, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
 // Bottom bezel (larger text): the WR badge (or HR badge and heart rate) and the
