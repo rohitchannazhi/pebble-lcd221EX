@@ -952,24 +952,28 @@ static void draw_temperature(void) {
 }
 
 // The date box's alternative to the date: today's low and high side by side, bottom-aligned
-// with the right box's digits, with a short divider between them. Each is a down or up arrow,
-// a sign slot (minus, or the "1" of 100+) and two digits; no degree mark (the right box's
-// temperature has one, and the space goes to bigger digits).
-#define RANGE_DIGIT_W 14
+// with the right box's digits, with a short divider between them. Each is a down or up arrow
+// (with a minus above it for a temperature below zero), a narrow slot for the "1" of 100+ and
+// two digits; no degree mark (the right box's temperature has one, and the space goes to bigger
+// digits).
+#define RANGE_DIGIT_W 15
 #define RANGE_DIGIT_H 30
 #define RANGE_LOW_X 2     // left edge of the low's arrow
-#define RANGE_HIGH_X 66   // and of the high's
-#define RANGE_DIV_X 61    // the divider between them
+#define RANGE_HIGH_X 65   // and of the high's
+#define RANGE_DIV_X 60    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
-  const int sx = x + 13, d1 = x + 21, d2 = x + 38;  // sign slot and digits
+  const int d1 = x + 18, d2 = x + 36;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  // The arrow sits level with the middle of the digits, shifted with their slant.
-  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 5) / 2, arrow, 9, 5, 1, 1, true, ink);
-  // The sign slot has no unlit ghost at this size: it would crowd the digits.
-  if (neg) draw_segments(sx, y, 7, h, SEG_G, SEG_G, ink);
-  if (hundred) draw_segments(sx - 8, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  // The arrow sits level with the middle of the digits, shifted with their slant, and a
+  // below-zero minus (as thick as a digit's bar) above it.
+  const int ay = y + (h - 5) / 2, ax = x + (h / 2) * s_slant / 1000;
+  draw_dots(ax, ay, arrow, 9, 5, 1, 1, true, ink);
+  if (neg) fill(ax + 1 + 10 * s_slant / 1000, ay - 10, 7, 3, ink, false);
+  // The "1" of 100+: the right verticals of a digit placed so they land between the arrow and
+  // the first digit. No unlit ghost at this size: it would crowd the digits.
+  if (hundred) draw_segments(x + 1, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
