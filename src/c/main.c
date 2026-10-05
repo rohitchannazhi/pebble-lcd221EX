@@ -958,22 +958,22 @@ static void draw_temperature(void) {
 // digits).
 #define RANGE_DIGIT_W 15
 #define RANGE_DIGIT_H 30
-#define RANGE_LOW_X 2     // left edge of the low's arrow
+#define RANGE_LOW_X 1     // left edge of the low's arrow
 #define RANGE_HIGH_X 65   // and of the high's
 #define RANGE_DIV_X 60    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
-  const int d1 = x + 18, d2 = x + 36;  // the digits
+  const int d1 = x + 20, d2 = x + 37;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
   // The arrow sits level with the middle of the digits, shifted with their slant, and a
   // below-zero minus (as thick as a digit's bar) above it.
-  const int ay = y + (h - 5) / 2, ax = x + (h / 2) * s_slant / 1000;
-  draw_dots(ax, ay, arrow, 9, 5, 1, 1, true, ink);
-  if (neg) fill(ax + 1 + 10 * s_slant / 1000, ay - 10, 7, 3, ink, false);
+  const int ay = y + (h - 6) / 2, ax = x + (h / 2) * s_slant / 1000;
+  draw_dots(ax, ay, arrow, 11, 6, 1, 1, true, ink);
+  if (neg) fill(ax + 1 + 10 * s_slant / 1000, ay - 10, 9, 3, ink, false);
   // The "1" of 100+: the right verticals of a digit placed so they land between the arrow and
   // the first digit. No unlit ghost at this size: it would crowd the digits.
-  if (hundred) draw_segments(x + 1, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
@@ -985,17 +985,19 @@ static void draw_range_value(int x, int t10, bool valid, const char *arrow, GCol
 
 static void draw_temperature_range(void) {
   static const char UP[] =
-    "....#...."
-    "...###..."
-    "..#####.."
-    ".#######."
-    "#########";
+    ".....#....."
+    "....###...."
+    "...#####..."
+    "..#######.."
+    ".#########."
+    "###########";
   static const char DOWN[] =
-    "#########"
-    ".#######."
-    "..#####.."
-    "...###..."
-    "....#....";
+    "###########"
+    ".#########."
+    "..#######.."
+    "...#####..."
+    "....###...."
+    ".....#.....";
   const bool valid = range_valid();
   draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
   draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
