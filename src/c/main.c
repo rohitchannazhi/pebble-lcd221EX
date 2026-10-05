@@ -584,7 +584,7 @@ static void apply_backlight(void) {
 
 // Row 1: weekday (left) and the 2x2 indicator box (right).
 #define WEEKDAY_X 12
-#define WEEKDAY_NARROW_X 8  // the narrowed weekday, followed by the day of the month
+#define WEEKDAY_NARROW_X 6  // the narrowed weekday, followed by the day of the month
 #define WEEKDAY_Y 34
 #define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
 #define BOX_RIGHT 191   // indicator box, right outer line
@@ -902,10 +902,10 @@ static void draw_date(void) {
 // With the date box showing the high and low: the day of the month after the (narrowed) weekday,
 // in 7-segment digits as tall as the weekday letters, so the row reads e.g. "MON 05".
 static void draw_month_day(void) {
-  const int d = s_now.tm_mday, w = 12, h = BOX_BOTTOM - BOX_TOP;
+  const int d = s_now.tm_mday, w = 11, h = BOX_BOTTOM - BOX_TOP;
   const bool blank = d < 10 && s_settings.date_pad != PAD_ZERO;
-  draw_digit(78, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
-  draw_digit(93, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
+  draw_digit(75, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
+  draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
 
 // Right box, option 1: the seconds, two digits centred in the box.
@@ -952,21 +952,21 @@ static void draw_temperature(void) {
   draw_dots(TEMP_X + 180 + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// The date box's alternative to the date: today's high (top row) and low (bottom row), each in
-// small digits after an up or down arrow: a sign slot (minus, or the "1" of 100+), two digits
-// and a degree mark. The rows start at RANGE_X, right of the DST label.
-#define RANGE_X 44
-#define RANGE_DIGIT_W 12
-#define RANGE_DIGIT_H 18
-static void draw_range_row(int y, int t10, bool valid, const char *arrow, GColor ink) {
-  const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W;
-  // Arrow, sign slot, the two digits and the degree mark.
-  const int ax = RANGE_X, sx = RANGE_X + 14, d1 = RANGE_X + 26, d2 = RANGE_X + 42, gx = RANGE_X + 57;
+// The date box's alternative to the date: today's low and high side by side, under the DST
+// label and bottom-aligned with where the date was. Each is a down or up arrow, a sign slot
+// (minus, or the "1" of 100+), two small digits and a degree mark.
+#define RANGE_DIGIT_W 10
+#define RANGE_DIGIT_H 22
+#define RANGE_GROUP_W 52  // from one arrow to the next
+static void draw_range_group(int x, int t10, bool valid, const char *arrow, GColor ink) {
+  const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
+  // Sign slot, the two digits and the degree mark, after the arrow.
+  const int sx = x + 9, d1 = x + 17, d2 = x + 29, gx = x + 40;
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  draw_dots(ax + (h / 2) * s_slant / 1000, y + (h - 5) / 2, arrow, 9, 5, 1, 1, true, ink);
+  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
   // The sign slot has no unlit ghost at this size: it would crowd the small digits.
-  if (neg) draw_segments(sx, y, 8, h, SEG_G, SEG_G, ink);
+  if (neg) draw_segments(sx, y, 7, h, SEG_G, SEG_G, ink);
   if (hundred) draw_segments(sx - 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
@@ -985,21 +985,11 @@ static void draw_range_row(int y, int t10, bool valid, const char *arrow, GColor
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] =
-    "....#...."
-    "...###..."
-    "..#####.."
-    ".#######."
-    "#########";
-  static const char DOWN[] =
-    "#########"
-    ".#######."
-    "..#####.."
-    "...###..."
-    "....#....";
+  static const char UP[] = "...#.....###...#####.#######";
+  static const char DOWN[] = "#######.#####...###.....#...";
   const bool valid = range_valid();
-  draw_range_row(ROW3_Y - 2, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
-  draw_range_row(ROW3_Y + ROW3_H - RANGE_DIGIT_H, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
+  draw_range_group(4, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
+  draw_range_group(4 + RANGE_GROUP_W, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
 }
 
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
