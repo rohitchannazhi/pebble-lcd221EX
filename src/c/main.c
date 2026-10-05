@@ -958,15 +958,15 @@ static void draw_temperature(void) {
 #define RANGE_DIGIT_W 14
 #define RANGE_DIGIT_H 30
 #define RANGE_LOW_X 2     // left edge of the low's arrow
-#define RANGE_HIGH_X 68   // and of the high's
-#define RANGE_DIV_X 62    // the divider between them
+#define RANGE_HIGH_X 66   // and of the high's
+#define RANGE_DIV_X 61    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
-  const int sx = x + 10, d1 = x + 18, d2 = x + 35;  // sign slot and digits
+  const int sx = x + 13, d1 = x + 21, d2 = x + 38;  // sign slot and digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
   // The arrow sits level with the middle of the digits, shifted with their slant.
-  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
+  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 5) / 2, arrow, 9, 5, 1, 1, true, ink);
   // The sign slot has no unlit ghost at this size: it would crowd the digits.
   if (neg) draw_segments(sx, y, 7, h, SEG_G, SEG_G, ink);
   if (hundred) draw_segments(sx - 8, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
@@ -980,8 +980,18 @@ static void draw_range_value(int x, int t10, bool valid, const char *arrow, GCol
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] = "...#.....###...#####.#######";
-  static const char DOWN[] = "#######.#####...###.....#...";
+  static const char UP[] =
+    "....#...."
+    "...###..."
+    "..#####.."
+    ".#######."
+    "#########";
+  static const char DOWN[] =
+    "#########"
+    ".#######."
+    "..#####.."
+    "...###..."
+    "....#....";
   const bool valid = range_valid();
   draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
   draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
