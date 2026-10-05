@@ -153,7 +153,9 @@ module.exports = [
         "type": "select", "messageKey": "CaseColor", "label": "Case color", "defaultValue": "black",
         "options": [
           { "label": "Black", "value": "black" },
-          { "label": "Silver", "value": "silver" }
+          { "label": "Silver", "value": "silver" },
+          { "label": "Charcoal (dotted)", "value": "dots" },
+          { "label": "Charcoal (checkerboard)", "value": "checker" }
         ]
       },
       {

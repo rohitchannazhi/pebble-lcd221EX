@@ -54,6 +54,10 @@ typedef enum {
 // Time format and temperature unit: follow the watch, or force one.
 enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
+// The black case can be "charcoal": dark gray dots dithered over it, 25% of the pixels or a
+// checkerboard. The value is also the dots' density out of 16 (see DENSITY_FULL) divided by 4.
+enum { CASE_SOLID = 0, CASE_DOTS = 1, CASE_CHECKER = 2 };
+
 // Date padding: zeros, a blank for the first number only, or blanks for both numbers.
 enum { PAD_ZERO = 0, PAD_FIRST_BLANK = 1, PAD_BOTH_BLANK = 2 };
 
@@ -93,6 +97,7 @@ typedef struct {
   uint8_t hour_no_zero;        // 1: 24-hour time has no leading zero (7:05, like the original)
   uint8_t date_pad;            // single-digit date numbers: PAD_ZERO (06-05), PAD_FIRST_BLANK ( 6-05), PAD_BOTH_BLANK ( 6- 5)
   uint8_t date_range;          // 1: the date box shows today's high and low; the day of the month moves up next to the weekday
+  uint8_t case_pattern;        // black case only: CASE_SOLID, or dark gray dots over it (CASE_DOTS, CASE_CHECKER)
 } Settings;
 
 typedef struct {
@@ -1109,6 +1114,17 @@ static void draw_indicator_labels(GContext *ctx) {
   }
 }
 
+// The charcoal case: dark gray dots over the black, on rows y0..y1, `density` out of DENSITY_FULL
+// with the same ordered dither as the ghosts (8 = a checkerboard).
+static void draw_case_pattern(int y0, int y1, int density) {
+  for (int y = y0; y <= y1; y++) {
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y);
+    for (int x = row.min_x; x <= row.max_x; x++) {
+      if (BAYER4[y & 3][x & 3] < density) row.data[x] = GColorDarkGrayARGB8;
+    }
+  }
+}
+
 static void canvas_update(Layer *layer, GContext *ctx) {
   // Case frame and LCD window.
   graphics_context_set_fill_color(ctx, s_col[COL_CASE]);
@@ -1117,9 +1133,11 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 2, LCD_W, LCD_H + 4), 0, GCornerNone);
   graphics_context_set_fill_color(ctx, s_lcd);
   graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y, LCD_W, LCD_H), 0, GCornerNone);
-  // A black LCD (inverted) would melt into a black case: mark the panel's edges. (With custom
-  // colours the edge is a colour of its own.)
-  if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8) {
+  // A black LCD (inverted) would melt into a plain black case: mark the panel's edges. (With
+  // custom colours the edge is a colour of its own; a charcoal case stands apart by itself.)
+  const bool charcoal = !s_colors.enabled && !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
+  if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 &&
+      !charcoal) {
     graphics_context_set_fill_color(ctx, GColorDarkGray);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 1, LCD_W, 1), 0, GCornerNone);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y + LCD_H, LCD_W, 1), 0, GCornerNone);
@@ -1128,6 +1146,10 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   s_quiet = quiet_time_is_active();
   s_fb = graphics_capture_frame_buffer(ctx);
   if (!s_fb) return;
+  if (charcoal) {
+    draw_case_pattern(0, LCD_Y - 3, s_settings.case_pattern * 4);
+    draw_case_pattern(LCD_Y + LCD_H + 2, PBL_DISPLAY_HEIGHT - 1, s_settings.case_pattern * 4);
+  }
   draw_lcd();
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
@@ -1430,7 +1452,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   }
   // Appearance
   if ((t = dict_find(iter, MESSAGE_KEY_CaseColor))) {
-    s_settings.silver = strcmp(t->value->cstring, "silver") == 0;
+    const char *c = t->value->cstring;
+    s_settings.silver = strcmp(c, "silver") == 0;
+    s_settings.case_pattern = strcmp(c, "dots") == 0 ? CASE_DOTS
+        : strcmp(c, "checker") == 0 ? CASE_CHECKER : CASE_SOLID;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_Inverted))) {
@@ -1538,6 +1563,7 @@ static void init(void) {
   if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
   if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
   if (s_settings.date_range > 1) s_settings.date_range = 0;
+  if (s_settings.case_pattern > CASE_CHECKER) s_settings.case_pattern = CASE_SOLID;
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
     s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
