@@ -54,13 +54,13 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | | Right text | `WR 3ATM` (up to 19 characters, capitals; only shown while the step count is off) |
 | Bottom bezel | Show heart rate | Off. When on, the WR badge becomes HR with the latest heart rate |
 | | Label | `PEBBLE` (up to 12 characters, capitals; empty for none) |
-| Appearance | Case color | Black, Silver, Charcoal (dotted: dark gray dots on 25% of the black case's pixels), Charcoal (checkerboard: half the pixels dark gray). On the watch's screen the dots blend into a dark charcoal; with Inverted colors the charcoal case sets the black LCD apart |
+| Appearance | Case color | Applies with custom colors too. Black, Silver, Charcoal (dotted: dark gray dots on 25% of the black case's pixels), Charcoal (checkerboard: half the pixels dark gray). On the watch's screen the dots blend into a dark charcoal; with Inverted colors the charcoal case sets the black LCD apart |
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
 | | Slanted digits | On, Off (leans the digits like the original; straight digits have sharper edges) |
 | | Show unlit segments | On, Off |
 | | Backlight color | **System default** (your watch's normal colour), Amber, Warm white, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, **Custom color...** (shows the app's own color picker, the watch's 64 colors) |
-| Custom colors | Use custom colors | Off. When on, every part of the face takes the color chosen below, and **Case color** and **Inverted colors** are ignored. The pickers start out as the normal black-on-white theme |
-| | Case and bezels | Case, top bezel left text, top bezel right text, bottom bezel WR / HR badge, heart rate, label |
+| Custom colors | Use custom colors | Off. When on, every part of the face except the case (which keeps its **Case color**) takes the color chosen below, and **Inverted colors** is ignored. The pickers start out as the normal black-on-white theme |
+| | Bezels | Top bezel left text, top bezel right text, bottom bezel WR / HR badge, heart rate, label |
 | | LCD panel | LCD window edge, LCD background, unlit segments and labels |
 | | Weekday and indicators | Weekday, indicator box outline, BT, CHG / FULL, DST, MUTE |
 | | Time | Hour digits, colon, minute digits, PM marker |

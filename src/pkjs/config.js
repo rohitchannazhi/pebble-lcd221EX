@@ -21,6 +21,8 @@ function colorItem(key, label, defaultValue) {
 
 module.exports = [
   { "type": "heading", "defaultValue": "LCD 221" },
+  // Filled in by custom-clay.js from GitHub when the page opens.
+  { "type": "text", "id": "commitInfo", "defaultValue": "Latest commit: checking GitHub..." },
   {
     "type": "section",
     "items": [
@@ -202,10 +204,9 @@ module.exports = [
       { "type": "heading", "defaultValue": "Custom colors" },
       {
         "type": "toggle", "messageKey": "CustomColors", "label": "Use custom colors", "defaultValue": false,
-        "description": "Choose the color of every part of the watch face. While on, Case color and Inverted colors are ignored. The watch has 64 colors, so a color is rounded to the nearest one. Unlit segments are drawn as faint dots, so they look paler than the color you pick."
+        "description": "Choose the color of every part of the watch face except the case, which keeps its Case color. While on, Inverted colors is ignored. The watch has 64 colors, so a color is rounded to the nearest one. Unlit segments are drawn as faint dots, so they look paler than the color you pick."
       },
-      colorHeading("Case and bezels"),
-      colorItem("ColCase", "Case", "000000"),
+      colorHeading("Bezels"),
       colorItem("ColTopLeft", "Top bezel, left text", "ffffff"),
       colorItem("ColTopRight", "Top bezel, right text", "ffffff"),
       colorItem("ColBadge", "Bottom bezel, WR / HR badge", "ffffff"),

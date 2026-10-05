@@ -44,15 +44,38 @@ module.exports = function () {
     syncCustom();
 
     // The individual colours only matter while "Use custom colors" is on (they are all in the
-    // group "colors"); the case colour and Inverted switch are replaced by them then.
-    var customColors = item('CustomColors'), caseColor = item('CaseColor'), inverted = item('Inverted');
+    // group "colors"); the Inverted switch is replaced by them then. (Case color always applies.)
+    var customColors = item('CustomColors'), inverted = item('Inverted');
     function syncColors() {
       var on = !!customColors.get();
       clayConfig.getItemsByGroup('colors').forEach(function (it) { if (on) it.show(); else it.hide(); });
-      if (on) { caseColor.hide(); inverted.hide(); } else { caseColor.show(); inverted.show(); }
+      if (on) inverted.hide(); else inverted.show();
     }
     customColors.on('change', syncColors);
     syncColors();
+
+    // One line naming the latest commit on GitHub, to compare with the commit the installed build
+    // was made from (CloudPebble shows it). The page has no other way to know the build's commit.
+    var commitInfo = clayConfig.getItemById('commitInfo');
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://api.github.com/repos/rohitchannazhi/pebble-lcd221ex/commits/main');
+      xhr.onload = function () {
+        try {
+          var c = JSON.parse(xhr.responseText);
+          var when = new Date(c.commit.committer.date);
+          var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          commitInfo.set('Latest commit: ' + c.sha.substring(0, 7) + ' (' + when.getDate() + ' ' +
+                         months[when.getMonth()] + ' ' + when.getFullYear() + ')');
+        } catch (e) {
+          commitInfo.set('Latest commit: unavailable');
+        }
+      };
+      xhr.onerror = function () { commitInfo.set('Latest commit: unavailable (offline?)'); };
+      xhr.send();
+    } catch (e) {
+      commitInfo.set('Latest commit: unavailable');
+    }
 
     // Reset: every setting goes back to the defaultValue declared in config.js;
     // the user then taps Save. The change events above keep hidden fields in sync.

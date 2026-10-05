@@ -535,10 +535,11 @@ static void apply_theme(void) {
   s_slant = s_settings.slanted ? LCD_SLANT : 0;
   s_smooth = LCD_AA && s_settings.slanted;
 
-  // One colour per component: the custom ones, or else the black/silver case and the
-  // normal or inverted LCD.
+  // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
+  // black or silver either way (Case color; the charcoal cases are black with a pattern).
   if (s_colors.enabled) {
     for (int i = 0; i < COL_COUNT; i++) s_col[i] = (GColor){ .argb = s_colors.argb[i] | 0xC0 };
+    s_col[COL_CASE] = s_settings.silver ? GColorLightGray : GColorBlack;
   } else {
     const GColor ink = inv ? GColorWhite : GColorBlack;
     // The case does not depend on the theme.
@@ -1135,7 +1136,8 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y, LCD_W, LCD_H), 0, GCornerNone);
   // A black LCD (inverted) would melt into a plain black case: mark the panel's edges. (With
   // custom colours the edge is a colour of its own; a charcoal case stands apart by itself.)
-  const bool charcoal = !s_colors.enabled && !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
+  // COL_CASE's custom colour is no longer offered: the case is always Case color.
+  const bool charcoal = !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
   if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 &&
       !charcoal) {
     graphics_context_set_fill_color(ctx, GColorDarkGray);
