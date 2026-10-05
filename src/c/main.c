@@ -1365,15 +1365,15 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_DateFormat))) {
-    s_settings.day_first = strcmp(t->value->cstring, "DM") == 0;
+    // "DM" or "MD", or "minmax": today's low and high in the date box (the day of the month
+    // moves up next to the weekday; day_first keeps its last value for when the date returns).
+    const char *f = t->value->cstring;
+    s_settings.date_range = strcmp(f, "minmax") == 0 ? 1 : 0;
+    if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_TimeZero))) {
     s_settings.hour_no_zero = tuple_int(t) ? 0 : 1;
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_DateBox))) {
-    s_settings.date_range = strcmp(t->value->cstring, "minmax") == 0 ? 1 : 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_DatePadding))) {

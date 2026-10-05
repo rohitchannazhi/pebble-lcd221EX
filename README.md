@@ -42,8 +42,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 |---|---|---|
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
 | | Leading zero in the hour | On (07:05), Off (`7:05`, like the original). 24-hour format only; not shown while 12-hour is selected |
-| | Date box shows | Date, Today's min / max temperature (the low then the high, side by side after ▼ / ▲ arrows, for the day where your phone is; `--` until the first weather reading of the day). With min / max, the day of the month moves up next to the weekday (`MON05`) |
-| | Date format | DD-MM, MM-DD (not shown while the date box shows min / max) |
+| | Date format | DD-MM, MM-DD, Min / max temperature (today's low then high, side by side after ▼ / ▲ arrows, for the day where your phone is, in place of the date; `--` until the first weather reading of the day. The day of the month moves up next to the weekday: `MON05`) |
 | | Single-digit dates | **Leading zeros** (`06-05`), blank first number only (` 6-05`), or blank both numbers (` 6- 5`, like the original). With min / max in the date box, the day next to the weekday follows this too (`MON 5` unless leading zeros) |
 | Right box | Right box shows | Temperature, Seconds (redraws every second: uses more battery) |
 | | Temperature unit | **Follow watch** (Fahrenheit when the watch uses imperial units, otherwise Celsius), Celsius, Fahrenheit (shown while the temperature can be on screen) |

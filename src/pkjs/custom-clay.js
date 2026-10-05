@@ -23,20 +23,18 @@ module.exports = function () {
 
     // The seconds mode only matters while the right box shows the seconds; the temperature
     // unit while a temperature is shown: in the right box (which includes the idle time of
-    // "after a shake") or the high and low in the date box. The date format only matters while
-    // the date box shows the date.
+    // "after a shake") or the high and low in the date box (the "Min / max" date format).
     var rightBox = item('RightBox'), secondsMode = item('SecondsMode'), unit = item('TempUnit');
-    var duration = item('SecondsDuration'), dateBox = item('DateBox'), dateFormat = item('DateFormat');
+    var duration = item('SecondsDuration'), dateFormat = item('DateFormat');
     function syncRightBox() {
-      var seconds = rightBox.get() === 'seconds', minmax = dateBox.get() === 'minmax';
+      var seconds = rightBox.get() === 'seconds', minmax = dateFormat.get() === 'minmax';
       if (seconds) secondsMode.show(); else secondsMode.hide();
       if (seconds && secondsMode.get() === 'shake') duration.show(); else duration.hide();
       if (!seconds || secondsMode.get() === 'shake' || minmax) unit.show(); else unit.hide();
-      if (minmax) dateFormat.hide(); else dateFormat.show();
     }
     rightBox.on('change', syncRightBox);
     secondsMode.on('change', syncRightBox);
-    dateBox.on('change', syncRightBox);
+    dateFormat.on('change', syncRightBox);
     syncRightBox();
 
     // The colour picker only matters while "Custom color..." is the backlight choice.

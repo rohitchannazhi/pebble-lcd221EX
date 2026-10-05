@@ -48,18 +48,12 @@ module.exports = [
         "description": "24-hour format only. Off shows 7:05 instead of 07:05, like the original watch."
       },
       {
-        "type": "select", "messageKey": "DateBox", "label": "Date box shows", "defaultValue": "date",
-        "description": "Min / max shows today's low (▼) and high (▲) side by side, for where your phone is, and the day of the month moves up next to the weekday (MON 05).",
-        "options": [
-          { "label": "Date", "value": "date" },
-          { "label": "Today's min / max temperature", "value": "minmax" }
-        ]
-      },
-      {
         "type": "select", "messageKey": "DateFormat", "label": "Date format", "defaultValue": "DM",
+        "description": "Min / max shows today's low (▼) and high (▲) temperature, for where your phone is, in place of the date, and the day of the month moves up next to the weekday (MON 05).",
         "options": [
           { "label": "DD-MM", "value": "DM" },
-          { "label": "MM-DD", "value": "MD" }
+          { "label": "MM-DD", "value": "MD" },
+          { "label": "Min / max temperature (MON 05)", "value": "minmax" }
         ]
       },
       {
