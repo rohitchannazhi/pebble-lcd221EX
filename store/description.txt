@@ -1,14 +1,14 @@
-A Pebble Time 2 watch face that recreates the look of the Casio W-221H digital watch: a crisp LCD with slanted 7-segment digits, faint "unlit" segments like a real display, a dot-matrix weekday and a small BT / CHG / SIG / MUTE indicator box, all between a top and a bottom bezel.
+A Pebble Time 2 watch face that recreates the look of the Casio W-221H digital watch: a crisp LCD with slanted 7-segment digits, faint "unlit" segments like a real display, a dot-matrix weekday and a small BT / CHG / DST / MUTE indicator box, all between a top and a bottom bezel.
 
 WHAT IT SHOWS
-- Time (12 or 24 hour, with the PM marker), weekday, and date (DD-MM or MM-DD) with a DST indicator
+- Time (12 or 24 hour, with the PM marker), weekday, and date (DD-MM or MM-DD), or today's low and high temperature with the day of the month next to the weekday
 - Right box: the temperature (C or F, or follow your watch) or the seconds
 - Top bezel: battery level and step count, or your own text instead of either
 - Bottom bezel: a WR badge, or HR and your latest heart rate, plus a text label of your choice
-- Indicators for phone connection, charging, hourly chime and Quiet Time
+- Indicators for phone connection, charging, daylight saving time and Quiet Time
 
 SETTINGS
-Black or silver case, normal or inverted colors, slanted or straight digits, unlit segments on or off, backlight color (system default, ten presets, or any of the app's 64 colors), a choice of vibration patterns when your phone disconnects or reconnects, and Reset to defaults. An optional hourly chime with several sounds, adjustable volume and a Quiet Time option.
+Black or silver case, normal or inverted colors, slanted or straight digits, unlit segments on or off, backlight color (system default, ten presets, or any of the app's 64 colors), a choice of vibration patterns when your phone disconnects or reconnects, and Reset to defaults. An optional vibration on the hour.
 
 PERMISSIONS
 Location (through your phone) for the weather, and health data for steps and heart rate. The only thing that leaves your phone is a weather request to Open-Meteo containing your location rounded to about 100 meters.

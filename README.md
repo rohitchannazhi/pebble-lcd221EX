@@ -18,9 +18,9 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 |---|---|
 | Top bezel | Battery level and step count, or your own text instead of either (settings) |
 | Weekday | Dot-matrix day name (SUN, MON, ...). While the date box shows the high and low, the letters are narrower and the day of the month follows them (`MON05`) |
-| Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **SIG** an audible hourly chime is set, Quiet Time is off and the watch's speaker is not muted, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
+| Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |
-| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each under a ▼ / ▲ arrow with a divider between them (settings). A **DST** label above (top left, or between the arrows) lights while daylight saving time is in effect in your time zone |
+| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each under a ▼ / ▲ arrow with a divider between them (settings). |
 | Right box | Temperature (°C or °F) or seconds |
 | Bottom bezel | A **WR** badge (or **HR** and your latest heart rate) and a text label |
 
@@ -63,19 +63,16 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | Custom colors | Use custom colors | Off. When on, every part of the face takes the color chosen below, and **Case color** and **Inverted colors** are ignored. The pickers start out as the normal black-on-white theme |
 | | Case and bezels | Case, top bezel left text, top bezel right text, bottom bezel WR / HR badge, heart rate, label |
 | | LCD panel | LCD window edge, LCD background, unlit segments and labels |
-| | Weekday and indicators | Weekday, indicator box outline, BT, CHG / FULL, SIG, MUTE |
+| | Weekday and indicators | Weekday, indicator box outline, BT, CHG / FULL, DST, MUTE |
 | | Time | Hour digits, colon, minute digits, PM marker |
-| | Date and right box | DST label, date / min-max temperature, divider lines, temperature / seconds (including the degree mark) |
+| | Date and right box | Date / min-max temperature, divider lines, temperature / seconds (including the degree mark) |
 | Alerts | Vibrate on phone disconnect | Double pulse (None, Short, Long, Double, Triple, Heartbeat, SOS) |
 | | Vibrate on phone reconnect | Short pulse (same patterns) |
-| | Hourly chime | Off, LCD Classic (two 4096 Hz beeps, like a digital watch's hourly signal), Doorbell, Big Ben (the first bar of the full-hour Westminster chime), Super (the first bar of a well-known video-game theme), Vibration only. Played at the top of the hour while the watch face is showing; choosing a sound plays it once when you save |
-| | Respect Quiet Time | On. When off, the chime is replaced by a vibration during Quiet Time, because the watch mutes its speaker then (only shown while a chime is chosen) |
-| | Chime volume | 70. 5 to 100 in steps of 5 (shown while a sound is chosen) |
-| | Play chime | A button (shown while a chime is chosen) that plays the chosen chime once when you tap Save, so you can hear it |
+| | Vibrate on the hour | Off. A double pulse at the top of every hour while the watch face is showing |
 
 Custom colors: the watch has 64 colors (four levels per channel), so a picked color is rounded to the nearest one. Unlit segments and dots are drawn as a sparse dither of their color (sparser on a dark LCD), so they look paler than the swatch: pick a stronger color for a stronger ghost. The anti-aliased edges of slanted digits are blended between each digit's color and the LCD background, so they stay smooth with any combination. A digit or label with the same color as the LCD background is simply invisible.
 
-There is no vibration during Quiet Time (except the hourly chime when "Respect Quiet Time" is off). When the two top-bezel texts are both long, the right
+There is no vibration during Quiet Time. When the two top-bezel texts are both long, the right
 text takes the width it needs and the left one is cut with "..." to fit.
 
 ## Building and installing
@@ -177,7 +174,7 @@ vibrations, the backlight colours, live heart rate, and every control on the set
   colour of their component; the anti-aliasing shades are mixed from it and the LCD colour (`mix_color()`).
 
 **Layout.** All positions are constants in the "Drawing" section of `main.c` (`LCD_*`, `BOX_*`,
-`TIME_*`, `ROW3_*`, `DST_*`, `TEMP_X`, `BOTTOM_CAP`). There is one function per screen area
+`TIME_*`, `ROW3_*`, `RANGE_*`, `TEMP_X`, `BOTTOM_CAP`). There is one function per screen area
 (`draw_time`, `draw_date`, `draw_temperature`, `draw_indicator_frame`, `draw_top_bezel`, ...).
 
 **Data flow.** The phone sends the temperature as the `Temp` message, in tenths of a degree Celsius (the watch converts it to the unit shown); the watch asks for a refresh

@@ -56,27 +56,6 @@ module.exports = function () {
     customColors.on('change', syncColors);
     syncColors();
 
-    // "Respect Quiet Time" and the sample button only matter while the hourly chime is on.
-    var chime = item('HourlyChime'), chimeQuiet = item('ChimeQuiet'), volume = item('ChimeVolume');
-    var playButton = clayConfig.getItemById('playChime'), test = item('ChimeTest');
-    function syncChime() {
-      var choice = chime.get();  // "0" off, "4" vibration only: no volume for those
-      if (choice === '0') { chimeQuiet.hide(); playButton.hide(); } else { chimeQuiet.show(); playButton.show(); }
-      if (choice === '0' || choice === '4') volume.hide(); else volume.show();
-    }
-    chime.on('change', syncChime);
-    syncChime();
-
-    // The sample button can't play anything itself (this page is not talking to the watch),
-    // so it asks the watch to play the chime when Save is tapped. The request is a hidden
-    // switch that is cleared every time the page opens, so it never sticks.
-    test.hide();
-    test.set(false);
-    function syncTest() { playButton.set(test.get() ? 'Chime plays when you tap Save' : 'Play chime'); }
-    test.on('change', syncTest);
-    playButton.on('click', function () { test.set(!test.get()); });
-    syncTest();
-
     // Reset: every setting goes back to the defaultValue declared in config.js;
     // the user then taps Save. The change events above keep hidden fields in sync.
     // It takes two taps within a few seconds, so a stray tap does nothing. (A confirm()

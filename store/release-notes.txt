@@ -1,1 +1,3 @@
 New: the date box can show today's high and low temperature instead of the date (Time & date > Date box shows), from the same Open-Meteo weather as the current temperature. The day of the month then moves up next to the weekday (MON05).
+Changed: the DST indicator moved into the indicator box, in place of SIG.
+Removed: the hourly chime's sounds. "Vibrate on the hour" replaces it (a chime set to vibration only keeps vibrating).

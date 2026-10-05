@@ -224,7 +224,7 @@ module.exports = [
       colorItem("ColFrame", "Indicator box outline", "000000"),
       colorItem("ColBt", "BT", "000000"),
       colorItem("ColChg", "CHG / FULL", "000000"),
-      colorItem("ColSig", "SIG", "000000"),
+      colorItem("ColDst", "DST", "000000"),
       colorItem("ColMute", "MUTE", "000000"),
       colorHeading("Time"),
       colorItem("ColHours", "Hour digits", "000000"),
@@ -232,7 +232,6 @@ module.exports = [
       colorItem("ColMinutes", "Minute digits", "000000"),
       colorItem("ColPm", "PM marker", "000000"),
       colorHeading("Date and right box"),
-      colorItem("ColDst", "DST label", "000000"),
       colorItem("ColDate", "Date / min-max temperature", "000000"),
       colorItem("ColRules", "Divider lines", "000000"),
       colorItem("ColRight", "Temperature / seconds", "000000")
@@ -254,30 +253,9 @@ module.exports = [
         "options": VIBE_PATTERNS
       },
       {
-        "type": "select", "messageKey": "HourlyChime", "label": "Hourly chime", "defaultValue": "0",
-        "description": "Played at the top of the hour while this watch face is showing. Choosing a sound plays it once when you save.",
-        "options": [
-          { "label": "Off", "value": "0" },
-          { "label": "LCD Classic", "value": "1" },
-          { "label": "Doorbell", "value": "2" },
-          { "label": "Big Ben", "value": "5" },
-          { "label": "Super", "value": "6" },
-          { "label": "Vibration only", "value": "4" }
-        ]
-      },
-      {
-        "type": "toggle", "messageKey": "ChimeQuiet", "label": "Respect Quiet Time", "defaultValue": true,
-        "description": "No chime during Quiet Time. When off, the chime is replaced by a vibration then, because the watch mutes its speaker during Quiet Time."
-      },
-      {
-        "type": "slider", "messageKey": "ChimeVolume", "label": "Chime volume", "defaultValue": 70,
-        "min": 5, "max": 100, "step": 5
-      },
-      {
-        "type": "button", "id": "playChime", "defaultValue": "Play chime",
-        "description": "Plays the chosen chime once when you tap Save, so you can hear it. The watch's own mute still applies."
-      },
-      { "type": "toggle", "messageKey": "ChimeTest", "label": "Play chime on save", "defaultValue": false }
+        "type": "toggle", "messageKey": "HourlyVibe", "label": "Vibrate on the hour", "defaultValue": false,
+        "description": "A double pulse at the top of every hour while this watch face is showing. Not during Quiet Time."
+      }
     ]
   },
   { "type": "submit", "defaultValue": "Save" }

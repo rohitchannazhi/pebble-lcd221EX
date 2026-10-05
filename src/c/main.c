@@ -39,8 +39,6 @@
 #define SECONDS_BURST_MIN_S 5
 #define SECONDS_BURST_MAX_S 120
 
-#define CHIME_VOLUME_DEFAULT 70  // 0-100
-
 #define BACKLIGHT_SYSTEM 0xFFFFFFFFu  // the user's normal backlight colour
 #define BACKLIGHT_CUSTOM 0xFFFFFFFEu  // use backlight_custom
 
@@ -49,13 +47,9 @@ typedef enum {
   VIBE_NONE, VIBE_SHORT, VIBE_LONG, VIBE_DOUBLE, VIBE_TRIPLE, VIBE_HEARTBEAT, VIBE_SOS, VIBE_COUNT
 } VibeChoice;
 
-// Hourly chime choices; the values are what the settings page sends.
-typedef enum {
-  CHIME_OFF = 0, CHIME_LCD_CLASSIC = 1, CHIME_DOORBELL = 2,
-  // 3 was retired; the values stay as they were so saved settings keep their meaning
-  CHIME_VIBE = 4, CHIME_BIG_BEN = 5, CHIME_SUPER = 6,
-  CHIME_COUNT
-} ChimeChoice;
+// Settings.hourly_vibe when on. It was the "vibration only" choice of the hourly chime, whose
+// sounds were removed in 1.4.0: saved settings that chose it keep vibrating, the sounds are off.
+#define HOURLY_VIBE_ON 4
 
 // Time format and temperature unit: follow the watch, or force one.
 enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
@@ -90,9 +84,8 @@ typedef struct {
   // Alerts
   uint8_t vibe_disconnect;     // VibeChoice played when the phone disconnects
   uint8_t vibe_connect;        // VibeChoice played when it reconnects
-  uint8_t chime;               // ChimeChoice played on the hour
-  bool chime_quiet;            // stay silent during Quiet Time
-  uint8_t chime_volume;        // 0-100
+  uint8_t hourly_vibe;         // HOURLY_VIBE_ON: a double pulse on the hour (0: off)
+  uint8_t unused1, unused2;    // were the hourly chime's Quiet Time and volume settings
   // Added after the groups above, at the end, so settings saved by earlier versions still load.
   // (They sit in what used to be padding, so the struct keeps its size; init() sanitises them.)
   uint8_t seconds_on_shake;    // 1: seconds tick only for a while after a wrist shake
@@ -114,7 +107,7 @@ typedef struct {
 typedef enum {
   COL_CASE, COL_TOP_LEFT, COL_TOP_RIGHT, COL_BADGE, COL_HEART, COL_LABEL,  // case and what is printed on it
   COL_EDGE, COL_LCD, COL_UNLIT,                                            // the LCD window
-  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row of the LCD
+  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row of the LCD (COL_SIG: unused)
   COL_HOURS, COL_COLON, COL_MINUTES, COL_PM,                               // the time
   COL_DST, COL_DATE, COL_RULES, COL_RIGHT,                                 // bottom row of the LCD
   COL_COUNT
@@ -156,8 +149,9 @@ static uint32_t color_key(int i) {
   return keys[i];
 }
 
-// The four indicator-box labels, in the order draw_indicator_labels() lists them.
-static const uint8_t INDICATOR_COLORS[] = { COL_BT, COL_CHG, COL_SIG, COL_MUTE };
+// The four indicator-box labels, in the order draw_indicator_labels() lists them. (SIG, the
+// hourly chime's indicator, made way for DST; COL_SIG stays so saved colours keep their places.)
+static const uint8_t INDICATOR_COLORS[] = { COL_BT, COL_CHG, COL_DST, COL_MUTE };
 
 static Window *s_window;
 static Layer *s_canvas;
@@ -168,7 +162,7 @@ static ColorSettings s_colors;
 static Weather s_weather;
 static time_t s_weather_saved;       // when s_weather was last written to persistent storage
 static bool s_focus = true;          // the face is the app in front (not covered by a system window)
-static bool s_quiet, s_muted;        // Quiet Time / speaker mute, read once per redraw
+static bool s_quiet;                 // Quiet Time, read once per redraw
 static time_t s_burst_until;         // seconds_on_shake: the seconds show until this time (0 = idle)
 static struct tm s_now;
 static BatteryChargeState s_battery;
@@ -609,10 +603,6 @@ static void apply_backlight(void) {
 #define PM_DY -2  // and how many rows it sits above the top of the digits
 
 // Row 3: date (left) and seconds / temperature (right), under a 2px rule.
-#define DST_X 4         // DST label cell, top left of the date cell
-#define DST_Y 157
-#define DST_W 34
-#define DST_H 12
 #define ROW3_LINE_Y 154
 #define ROW3_DIV_X 110  // vertical divider between the date and the right box
 #define ROW3_Y 160      // top of the right box's digits
@@ -654,10 +644,10 @@ static void draw_bezel_text(GContext *ctx, const char *text, int x, int y, int w
 #define FIT_MAX_W 40  // the widest indicator cell is 39 px,
 #define FIT_MAX_H 12  // and every cell is 12 rows tall
 #define FIT_MAX_LETTERS 8
-_Static_assert(BOX_RIGHT - BOX_DIV - 2 <= FIT_MAX_W && BOX_DIV - BOX_LEFT - 4 <= FIT_MAX_W &&
-               DST_W <= FIT_MAX_W, "an indicator cell is wider than the label scratch buffer");
-_Static_assert(BOX_MID - BOX_TOP - 2 <= FIT_MAX_H && BOX_BOTTOM - BOX_MID - 2 <= FIT_MAX_H &&
-               DST_H <= FIT_MAX_H, "an indicator cell is taller than the label scratch buffer");
+_Static_assert(BOX_RIGHT - BOX_DIV - 2 <= FIT_MAX_W && BOX_DIV - BOX_LEFT - 4 <= FIT_MAX_W,
+               "an indicator cell is wider than the label scratch buffer");
+_Static_assert(BOX_MID - BOX_TOP - 2 <= FIT_MAX_H && BOX_BOTTOM - BOX_MID - 2 <= FIT_MAX_H,
+               "an indicator cell is taller than the label scratch buffer");
 #define BAR_RUN 4  // a horizontal run of this many ink pixels makes a row part of a bar
 
 typedef uint8_t FitRows[FIT_MAX_H][FIT_MAX_W];
@@ -954,7 +944,7 @@ static void draw_temperature(void) {
 
 // The date box's alternative to the date: today's low and high side by side, as tall as the
 // date's digits and bottom-aligned with them, with a down or up arrow centred above each and a
-// short divider between them (the DST label moves up between the arrows, see draw_dst_label).
+// short divider between them.
 // Each value is a sign slot (minus, or the "1" of 100+), two digits and a degree mark.
 #define RANGE_DIGIT_W 12
 #define RANGE_DIGIT_H 26
@@ -962,7 +952,6 @@ static void draw_temperature(void) {
 #define RANGE_HIGH_X 58   // and of the high's
 #define RANGE_DIV_X 53    // the divider between them
 #define RANGE_ARROW_Y 159
-#define RANGE_DST_X 37    // the DST label, centred between the arrows
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
   const int d1 = x + 9, d2 = x + 24, gx = x + 38;  // the two digits and the degree mark
@@ -1085,21 +1074,11 @@ static void draw_bottom_bezel(GContext *ctx) {
                   s_col[COL_LABEL]);
 }
 
-// SIG lights up while a sound (not just a vibration) is set as the hourly chime and the
-// speaker is not muted. Quiet Time mutes the speaker, so the chime is off for its duration;
-// the setting itself is untouched, so SIG comes back when Quiet Time ends.
-static bool chime_is_audible(void) {
-  const uint8_t c = s_settings.chime;
-  const bool sound =
-      c == CHIME_LCD_CLASSIC || c == CHIME_DOORBELL || c == CHIME_BIG_BEN || c == CHIME_SUPER;
-  // The speaker is also muted for good in the watch's sound settings, not only in Quiet Time.
-  return sound && !s_quiet && !s_muted;
-}
-
-// The indicator box's labels: lit (ink) when active, faint otherwise. Each is
-// fitted to LABEL_H rows and centred vertically in its cell (the cells are the
-// rows between the 2px frame and the middle divider); "BT" is also widened. The
-// CHG and SIG cells stop 1px short of the rounded corners that intrude.
+// The indicator box's labels: lit (ink) when active, faint otherwise. DST is lit while daylight
+// saving time is in effect in the watch's time zone (the phone provides the zone; the watch's
+// own clock knows when DST applies). Each is fitted to LABEL_H rows and centred vertically in
+// its cell (the cells are the rows between the 2px frame and the middle divider); "BT" is also
+// widened. The CHG and DST cells stop 1px short of the rounded corners that intrude.
 static void draw_indicator_labels(GContext *ctx) {
   const int top_h = BOX_MID - BOX_TOP - 2, bottom_h = BOX_BOTTOM - BOX_MID - 2;
   const int left_w = BOX_DIV - BOX_LEFT, right_w = BOX_RIGHT - BOX_DIV;
@@ -1111,7 +1090,7 @@ static void draw_indicator_labels(GContext *ctx) {
       GRect(BOX_LEFT + 4, BOX_TOP + 2, left_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
     { full ? "FULL" : "CHG", s_battery.is_charging || full,
       GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), NULL, 0 },
-    { "SIG",  chime_is_audible(),
+    { "DST",  s_now.tm_isdst > 0,
       GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
     { "MUTE", s_quiet,
       GRect(BOX_DIV + 1, BOX_MID + 1, right_w - 2, bottom_h), NULL, 0 },
@@ -1122,17 +1101,6 @@ static void draw_indicator_labels(GContext *ctx) {
                      ind[i].on ? s_col[INDICATOR_COLORS[i]] : s_ghost,
                      ind[i].on ? DENSITY_FULL : s_label_off_density);
   }
-}
-
-// DST: top left of the date cell, lit while daylight saving time is in effect in the watch's
-// time zone (the phone provides the zone; the watch's own clock knows when DST applies).
-static void draw_dst_label(GContext *ctx) {
-  const bool on = s_now.tm_isdst > 0;
-  if (!on && !s_settings.ghosts) return;
-  // With the high and low in the date box, it sits between their arrows.
-  const int x = s_settings.date_range ? RANGE_DST_X : DST_X;
-  draw_fitted_text(ctx, "DST", GRect(x, DST_Y, DST_W, DST_H), NULL, 0, LABEL_H,
-                   on ? s_col[COL_DST] : s_ghost, on ? DENSITY_FULL : s_label_off_density);
 }
 
 static void canvas_update(Layer *layer, GContext *ctx) {
@@ -1152,7 +1120,6 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   }
 
   s_quiet = quiet_time_is_active();
-  s_muted = speaker_is_muted();
   s_fb = graphics_capture_frame_buffer(ctx);
   if (!s_fb) return;
   draw_lcd();
@@ -1164,7 +1131,6 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   draw_top_bezel(ctx);
   draw_bottom_bezel(ctx);
   draw_indicator_labels(ctx);
-  draw_dst_label(ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1193,7 +1159,6 @@ static void refresh_weather_if_needed(void) {
 }
 
 static void tick_handler(struct tm *now, TimeUnits changed);
-static void play_chime(bool preview);
 
 // Once a minute normally (plus the hour, so a whole-hour time zone change redraws at once);
 // every second only while the seconds are shown AND the face is in front.
@@ -1248,7 +1213,11 @@ static void tick_handler(struct tm *now, TimeUnits changed) {
     if (now->tm_min % WEATHER_REFRESH_MIN == 0) refresh_weather_if_needed();
   }
   layer_mark_dirty(s_canvas);
-  if (now->tm_min == 0 && now->tm_sec == 0) play_chime(false);
+  // The hourly vibration: on the hour, while the face is showing, never during Quiet Time.
+  if (now->tm_min == 0 && now->tm_sec == 0 && s_settings.hourly_vibe == HOURLY_VIBE_ON &&
+      !quiet_time_is_active()) {
+    vibes_double_pulse();
+  }
 }
 
 static void battery_handler(BatteryChargeState state) {
@@ -1275,92 +1244,6 @@ static void play_vibe(uint8_t pattern) {
       break;
     case VIBE_SOS:
       vibes_enqueue_custom_pattern((VibePattern){ .durations = SOS, .num_segments = ARRAY_LENGTH(SOS) });
-      break;
-    default: break;
-  }
-}
-
-#define LCD_BEEP_HZ 4096
-#define LCD_BEEP_MS 120
-
-static void lcd_second_beep(void *context) {
-  speaker_play_tone(LCD_BEEP_HZ, LCD_BEEP_MS + 10, s_settings.chime_volume, SpeakerWaveformSquare);
-}
-
-// Tunes are built into one buffer that stays valid while the speaker plays it.
-#define TUNE_MAX 24  // the longest tune needs 15 notes
-static SpeakerNote s_tune[TUNE_MAX];
-static uint32_t s_tune_len;
-
-static void tune_add(uint8_t midi, uint16_t ms, SpeakerWaveform wave) {
-  if (s_tune_len < TUNE_MAX) {
-    s_tune[s_tune_len++] = (SpeakerNote){ .midi_note = midi, .waveform = wave, .duration_ms = ms };
-  }
-}
-
-// Big Ben: the first bar of the Westminster Quarters' full-hour chime, three 550 ms notes and
-// a 1100 ms one in the key of E major (E4 G#4 F#4 B3).
-static void build_big_ben(void) {
-  static const uint8_t BAR[4] = { 64, 68, 66, 59 };
-  s_tune_len = 0;
-  for (int n = 0; n < 4; n++) tune_add(BAR[n], n == 3 ? 1100 : 550, SpeakerWaveformSine);
-}
-
-// The first bar of a well-known platform-game theme, up to the high G (midi note, length in
-// 85 ms steps; 0 = rest).
-static void build_super(void) {
-  static const uint8_t TUNE[][2] = {
-    { 76, 1 }, { 76, 1 }, { 0, 1 }, { 76, 1 }, { 0, 1 }, { 72, 1 }, { 76, 1 }, { 0, 1 },
-    { 79, 2 },
-  };
-  s_tune_len = 0;
-  for (size_t i = 0; i < ARRAY_LENGTH(TUNE); i++) {
-    uint16_t ms = TUNE[i][1] * 85;
-    if (TUNE[i][0] == 0) {
-      tune_add(0, ms, SpeakerWaveformSquare);
-    } else {
-      tune_add(TUNE[i][0], ms - 12, SpeakerWaveformSquare);  // a short gap so repeats stay separate
-      tune_add(0, 12, SpeakerWaveformSquare);
-    }
-  }
-}
-
-// The hourly chime. The watch mutes its speaker during Quiet Time and apps can't override
-// that, so when the chime is allowed then, it is replaced by a vibration. `preview` plays
-// it once when the choice is saved, whatever the time or Quiet Time.
-static void play_chime(bool preview) {
-  static const SpeakerNote BELL[] = {
-    { 76, SpeakerWaveformSine, 500, 0, 0 }, { 72, SpeakerWaveformSine, 900, 0, 0 },
-  };
-  const uint8_t choice = s_settings.chime;
-  if (choice == CHIME_OFF || choice == 3 || choice >= CHIME_COUNT) return;
-  const bool quiet = quiet_time_is_active();
-  if (quiet && s_settings.chime_quiet && !preview) return;
-  if (choice == CHIME_VIBE) {
-    vibes_double_pulse();
-    return;
-  }
-  if (speaker_is_muted()) {
-    if (quiet && !s_settings.chime_quiet) vibes_double_pulse();  // the speaker is muted for Quiet Time
-    return;
-  }
-  switch (choice) {
-    case CHIME_LCD_CLASSIC:
-      // Two flat 4096 Hz beeps, 120 ms long with a 120 ms gap, as measured from a recording
-      // of a digital watch hourly signal. The notes API only has semitone steps, so the second beep
-      // is scheduled with a timer to keep the exact frequency.
-      if (speaker_play_tone(LCD_BEEP_HZ, LCD_BEEP_MS, s_settings.chime_volume, SpeakerWaveformSquare)) {
-        app_timer_register(2 * LCD_BEEP_MS, lcd_second_beep, NULL);
-      }
-      break;
-    case CHIME_DOORBELL:  speaker_play_notes(BELL, ARRAY_LENGTH(BELL), s_settings.chime_volume); break;
-    case CHIME_BIG_BEN:
-      build_big_ben();
-      speaker_play_notes(s_tune, s_tune_len, s_settings.chime_volume);
-      break;
-    case CHIME_SUPER:
-      build_super();
-      speaker_play_notes(s_tune, s_tune_len, s_settings.chime_volume);
       break;
     default: break;
   }
@@ -1443,7 +1326,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   Tuple *t;
   bool settings_changed = false;
   bool colors_changed = false;
-  bool play_preview = false;
 
   if ((t = dict_find(iter, MESSAGE_KEY_Temp))) {
     const int16_t temp = (int16_t)tuple_int(t);
@@ -1581,24 +1463,8 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.vibe_connect = (v >= 0 && v < VIBE_COUNT) ? v : VIBE_NONE;
     settings_changed = true;
   }
-  if ((t = dict_find(iter, MESSAGE_KEY_HourlyChime))) {
-    int v = tuple_int(t);
-    uint8_t chime = (v >= 0 && v < CHIME_COUNT && v != 3) ? v : CHIME_OFF;
-    play_preview = chime != CHIME_OFF && chime != s_settings.chime;
-    s_settings.chime = chime;
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_ChimeQuiet))) {
-    s_settings.chime_quiet = tuple_int(t);
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_ChimeVolume))) {
-    int v = tuple_int(t);
-    s_settings.chime_volume = v < 0 ? 0 : v > 100 ? 100 : v;
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_ChimeTest)) && tuple_int(t)) {
-    play_preview = true;  // asked for with the settings page's "Play chime" button
+  if ((t = dict_find(iter, MESSAGE_KEY_HourlyVibe))) {
+    s_settings.hourly_vibe = tuple_int(t) ? HOURLY_VIBE_ON : 0;
     settings_changed = true;
   }
 
@@ -1627,7 +1493,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     subscribe_ticks();
     if (s_settings.show_steps) update_steps();
     refresh_weather_if_needed();
-    if (play_preview) play_chime(true);
   }
   layer_mark_dirty(s_canvas);
 }
@@ -1659,8 +1524,6 @@ static void init(void) {
     .backlight = BACKLIGHT_SYSTEM,
     .vibe_disconnect = VIBE_DOUBLE,
     .vibe_connect = VIBE_SHORT,
-    .chime_quiet = true,
-    .chime_volume = CHIME_VOLUME_DEFAULT,
     .seconds_burst_s = SECONDS_BURST_DEFAULT_S,
   };
   persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
@@ -1669,6 +1532,7 @@ static void init(void) {
   if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
   if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
   if (s_settings.date_range > 1) s_settings.date_range = 0;
+  if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
     s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
   }
