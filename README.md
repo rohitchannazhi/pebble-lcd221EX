@@ -54,7 +54,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | | Right text | `WR 3ATM` (up to 19 characters, capitals; only shown while the step count is off) |
 | Bottom bezel | Show heart rate | Off. When on, the WR badge becomes HR with the latest heart rate |
 | | Label | `PEBBLE` (up to 12 characters, capitals; empty for none) |
-| Appearance | Case color | Black, Silver |
+| Appearance | Case color | Black, Silver, Charcoal (dotted: dark gray dots on 25% of the black case's pixels), Charcoal (checkerboard: half the pixels dark gray). On the watch's screen the dots blend into a dark charcoal; with Inverted colors the charcoal case sets the black LCD apart |
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
 | | Slanted digits | On, Off (leans the digits like the original; straight digits have sharper edges) |
 | | Show unlit segments | On, Off |
@@ -167,7 +167,7 @@ vibrations, the backlight colours, live heart rate, and every control on the set
 - The weekday is a 5x5 dot matrix, upright like the original. The bezel text uses the system fonts.
 - Colours come from one place, `apply_theme()`, which fills `s_col[]` with one colour per component
   (`ColorId`: `COL_CASE`, `COL_HOURS`, `COL_BT`, ...). Without custom colours that is the normal (black on
-  white) or inverted (white on black) theme, with the case black or silver. With "Use custom colors" it is
+  white) or inverted (white on black) theme, with the case black, silver or charcoal (dark gray dots dithered over black). With "Use custom colors" it is
   whatever the settings page sent (`ColorSettings`, saved under its own persistent key, `COLORS_KEY`, so
   the layout of `Settings` did not change and nobody's saved settings are reset). Drawing functions take the
   colour of their component; the anti-aliasing shades are mixed from it and the LCD colour (`mix_color()`).
