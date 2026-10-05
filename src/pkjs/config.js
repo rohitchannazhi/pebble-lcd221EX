@@ -72,9 +72,10 @@ module.exports = [
       {
         "type": "select", "messageKey": "RightBox", "label": "Right box shows",
         "defaultValue": "temperature",
-        "description": "Seconds redraw the watch face every second, which uses more battery.",
+        "description": "Min / max shows today's high (top) and low (bottom) where your phone is. Seconds redraw the watch face every second, which uses more battery.",
         "options": [
           { "label": "Temperature", "value": "temperature" },
+          { "label": "Today's min / max temperature", "value": "minmax" },
           { "label": "Seconds", "value": "seconds" }
         ]
       },

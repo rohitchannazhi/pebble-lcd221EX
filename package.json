@@ -1,7 +1,7 @@
 {
   "name": "lcd-221",
   "author": "Kicou",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "keywords": ["pebble-app"],
   "private": true,
   "license": "MIT",
@@ -20,6 +20,8 @@
     "capabilities": ["configurable", "location", "health"],
     "messageKeys": [
       "Temp",
+      "TempMin",
+      "TempMax",
       "RequestWeather",
       "TimeFormat",
       "TimeZero",

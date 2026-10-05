@@ -31,7 +31,7 @@
 #define LCD_SLANT 75
 #define LCD_AA true
 #define SETTINGS_KEY 17  // bumped whenever existing Settings fields change layout (new fields may use free padding)
-#define WEATHER_KEY 5  // bumped whenever Weather changes layout
+#define WEATHER_KEY 6  // bumped whenever Weather changes layout
 #define COLORS_KEY 18  // ColorSettings, persisted apart from Settings so old saves stay valid
 #define WEATHER_MAX_AGE (3 * 60 * 60)
 #define WEATHER_REFRESH_MIN 30
@@ -99,11 +99,14 @@ typedef struct {
   uint8_t seconds_burst_s;     // how many seconds they tick for
   uint8_t hour_no_zero;        // 1: 24-hour time has no leading zero (7:05, like the original)
   uint8_t date_pad;            // single-digit date numbers: PAD_ZERO (06-05), PAD_FIRST_BLANK ( 6-05), PAD_BOTH_BLANK ( 6- 5)
+  uint8_t right_range;         // 1: the right box shows today's high and low instead of the temperature
 } Settings;
 
 typedef struct {
   int16_t temp;                // tenths of a degree Celsius
   time_t updated;
+  int16_t temp_min, temp_max;  // today's low and high, tenths of a degree Celsius
+  uint8_t has_range;           // 1: temp_min/temp_max came with the last reading
 } Weather;
 
 // Every part of the face whose colour can be chosen on the settings page ("Custom colors").
@@ -491,6 +494,14 @@ static bool weather_valid(void) {
   return s_weather.updated != 0 && time(NULL) - s_weather.updated <= WEATHER_MAX_AGE;
 }
 
+// Today's high and low: from a valid reading taken on the current day (they belong to the day
+// they were fetched for, so they turn to "--" at midnight until the next reading).
+static bool range_valid(void) {
+  if (!weather_valid() || !s_weather.has_range) return false;
+  const time_t updated = s_weather.updated;
+  return localtime(&updated)->tm_yday == s_now.tm_yday;
+}
+
 static void update_heart_rate(void) {
 #if defined(PBL_HEALTH)
   time_t now = time(NULL);
@@ -796,9 +807,8 @@ static bool use_fahrenheit(void) {
 #endif
 }
 
-// The stored temperature (tenths of a degree Celsius) in the unit shown, rounded.
-static int display_temp(void) {
-  int t10 = s_weather.temp;
+// A temperature in tenths of a degree Celsius, in the unit shown, rounded.
+static int display_temp(int t10) {
   if (use_fahrenheit()) {
     int f50 = t10 * 9 + 1600;  // fiftieths of a degree Fahrenheit, rounded only once below
     return (f50 + (f50 >= 0 ? 25 : -25)) / 50;
@@ -899,7 +909,7 @@ static void draw_seconds(void) {
 static void draw_temperature(void) {
   const GColor ink = s_col[COL_RIGHT];
   const int dy = ROW3_Y, dh = ROW3_H;
-  int temp = display_temp(), v = abs(temp);
+  int temp = display_temp(s_weather.temp), v = abs(temp);
   bool valid = weather_valid();
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
   // The minus is the font's middle bar in a narrow box; the "1" is the right
@@ -930,6 +940,45 @@ static void draw_temperature(void) {
   draw_dots(TEMP_X + 180 + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
+// Right box, option 3: today's high (top row) and low (bottom row), each in small digits after
+// an up or down arrow: a sign slot (minus, or the "1" of 100+), two digits and a degree mark.
+#define RANGE_DIGIT_W 11
+#define RANGE_DIGIT_H 16
+static void draw_range_row(int y, int t10, bool valid, const char *arrow, GColor ink) {
+  const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W;
+  const int ax = 124, sx = 136, d1 = 148, d2 = 163, gx = 178;  // arrow, sign slot, digits, degree
+  int temp = display_temp(t10), v = abs(temp);
+  bool neg = valid && temp < 0, hundred = valid && v >= 100;
+  draw_dots(ax + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
+  // As in draw_temperature: unlit parts first, so the lit one is never covered by a ghost.
+  if (!neg) draw_segments(sx, y, 8, h, 0, SEG_G, ink);
+  if (!hundred) draw_segments(sx - 3, y, w, h, 0, SEG_B | SEG_C, ink);
+  if (neg) draw_segments(sx, y, 8, h, SEG_G, SEG_G, ink);
+  if (hundred) draw_segments(sx - 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  if (!valid) {
+    draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
+    draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
+  } else {
+    draw_digit(d1, y, w, h, (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
+    draw_digit(d2, y, w, h, v % 10, ink);
+  }
+  static const char DEGREE_SMALL[] =
+    ".###."
+    "#...#"
+    "#...#"
+    "#...#"
+    ".###.";
+  draw_dots(gx + (h - 3) * s_slant / 1000, y, DEGREE_SMALL, 5, 5, 1, 1, true, ink);
+}
+
+static void draw_temperature_range(void) {
+  static const char UP[] = "...#.....###...#####.#######";
+  static const char DOWN[] = "#######.#####...###.....#...";
+  const bool valid = range_valid();
+  draw_range_row(ROW3_Y, s_weather.temp_max, valid, UP, s_col[COL_RIGHT]);
+  draw_range_row(ROW3_Y + ROW3_H - RANGE_DIGIT_H, s_weather.temp_min, valid, DOWN, s_col[COL_RIGHT]);
+}
+
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
 // it can never last longer than seconds_burst_s.
 static bool burst_active(void) {
@@ -954,6 +1003,7 @@ static void draw_lcd(void) {
   fill(ROW3_DIV_X, ROW3_LINE_Y, 2, LCD_Y + LCD_H - ROW3_LINE_Y, s_col[COL_RULES], false);
   draw_date();
   if (seconds_showing()) draw_seconds();
+  else if (s_settings.right_range && !s_settings.show_seconds) draw_temperature_range();
   else draw_temperature();
 }
 
@@ -1097,7 +1147,10 @@ static void request_weather(void) {
 static void refresh_weather_if_needed(void) {
   // The temperature is on screen unless the seconds are always shown.
   if ((s_settings.show_seconds && !s_settings.seconds_on_shake) || !s_connected) return;
-  if (s_weather.updated != 0 && time(NULL) - s_weather.updated < (WEATHER_REFRESH_MIN - 5) * 60) return;
+  // A recent reading is enough, except when the high and low on screen belong to yesterday.
+  const bool stale_range = s_settings.right_range && !s_settings.show_seconds && !range_valid();
+  if (!stale_range && s_weather.updated != 0 &&
+      time(NULL) - s_weather.updated < (WEATHER_REFRESH_MIN - 5) * 60) return;
   request_weather();
 }
 
@@ -1357,8 +1410,21 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   if ((t = dict_find(iter, MESSAGE_KEY_Temp))) {
     const int16_t temp = (int16_t)tuple_int(t);
     const time_t now = time(NULL);
-    const bool changed = temp != s_weather.temp;
+    Tuple *lo = dict_find(iter, MESSAGE_KEY_TempMin), *hi = dict_find(iter, MESSAGE_KEY_TempMax);
+    const bool has_range = lo && hi;
+    const int16_t temp_min = has_range ? (int16_t)tuple_int(lo) : 0;
+    const int16_t temp_max = has_range ? (int16_t)tuple_int(hi) : 0;
+    // A new day's high and low must be saved too, even if nothing else changed.
+    // (localtime() returns one shared buffer, so the two days are read one at a time.)
+    const time_t before = s_weather.updated;
+    const int day_before = before == 0 ? -1 : localtime(&before)->tm_yday;
+    const bool new_day = day_before != localtime(&now)->tm_yday;
+    const bool changed = temp != s_weather.temp || has_range != s_weather.has_range ||
+                         temp_min != s_weather.temp_min || temp_max != s_weather.temp_max || new_day;
     s_weather.temp = temp;
+    s_weather.temp_min = temp_min;
+    s_weather.temp_max = temp_max;
+    s_weather.has_range = has_range ? 1 : 0;
     s_weather.updated = now;
     // Flash writes cost energy: save when the value changed, otherwise about hourly (the
     // saved timestamp only has to be good enough for the 3 hour "too old" limit).
@@ -1389,6 +1455,7 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   // Right box
   if ((t = dict_find(iter, MESSAGE_KEY_RightBox))) {
     s_settings.show_seconds = strcmp(t->value->cstring, "seconds") == 0;
+    s_settings.right_range = strcmp(t->value->cstring, "minmax") == 0 ? 1 : 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_SecondsMode))) {
@@ -1560,10 +1627,12 @@ static void init(void) {
   if (s_settings.seconds_on_shake > 1) s_settings.seconds_on_shake = 0;
   if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
   if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
+  if (s_settings.right_range > 1) s_settings.right_range = 0;
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
     s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
   }
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
+  if (s_weather.has_range > 1) s_weather.has_range = 0;
   s_colors.enabled = 0;
   memcpy(s_colors.argb, COLOR_DEFAULTS, sizeof(s_colors.argb));
   persist_read_data(COLORS_KEY, &s_colors, sizeof(s_colors));

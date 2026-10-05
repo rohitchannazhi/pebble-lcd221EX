@@ -1,8 +1,8 @@
 // Phone-side code (runs in the Pebble app): the settings page (Clay) and the
 // weather fetch. Weather comes from Open-Meteo using the phone's location and is
-// sent to the watch as the "Temp" app message, in tenths of a degree Celsius (the watch
-// picks Celsius or Fahrenheit); the watch asks for a refresh with
-// "RequestWeather". Clay delivers the settings itself.
+// sent to the watch as the "Temp" app message, with today's low and high as "TempMin" and
+// "TempMax", all in tenths of a degree Celsius (the watch picks Celsius or Fahrenheit); the
+// watch asks for a refresh with "RequestWeather". Clay delivers the settings itself.
 
 var Clay = require('pebble-clay');
 var clayConfig = require('./config');
@@ -31,15 +31,25 @@ function fetchWeather(minAgeMs) {
     var url = 'https://api.open-meteo.com/v1/forecast' +
       '?latitude=' + pos.coords.latitude.toFixed(3) +
       '&longitude=' + pos.coords.longitude.toFixed(3) +
-      '&current=temperature_2m';
+      '&current=temperature_2m' +
+      '&daily=temperature_2m_min,temperature_2m_max' +
+      '&forecast_days=1&timezone=auto';  // "today" is the local day where the phone is
     var xhr = new XMLHttpRequest();
     xhr.onload = function () {
       try {
-        var cur = JSON.parse(this.responseText).current;
+        var data = JSON.parse(this.responseText), cur = data.current;
         if (!cur || typeof cur.temperature_2m !== 'number') throw new Error('no temperature in reply');
-        Pebble.sendAppMessage({
+        var msg = {
           Temp: Math.round(cur.temperature_2m * 10)  // tenths of a degree Celsius; the watch converts
-        });
+        };
+        var daily = data.daily;
+        var lo = daily && daily.temperature_2m_min && daily.temperature_2m_min[0];
+        var hi = daily && daily.temperature_2m_max && daily.temperature_2m_max[0];
+        if (typeof lo === 'number' && typeof hi === 'number') {
+          msg.TempMin = Math.round(lo * 10);
+          msg.TempMax = Math.round(hi * 10);
+        }
+        Pebble.sendAppMessage(msg);
         rememberWeatherTime();
       } catch (e) {
         lastFetch = 0;

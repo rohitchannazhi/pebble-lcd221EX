@@ -1,3 +1,1 @@
-New: "Leading zero in the hour" option: turn it off for 7:05 instead of 07:05 in 24-hour mode, like the original watch.
-New: "Single-digit dates" option: leading zeros (06-05, the default), a blank for the first number only ( 6-05), or blanks for both ( 6- 5).
-The settings in Time & date and Right box are now in a more logical order.
+New: the right box can show today's high and low temperature (Right box shows > Today's min / max temperature), from the same Open-Meteo weather as the current temperature.
