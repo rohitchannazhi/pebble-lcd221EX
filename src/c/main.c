@@ -572,20 +572,20 @@ static void apply_backlight(void) {
 // Screen layout (Pebble Time 2, 200x228): a black case with a white "LCD" panel
 // running edge to edge, a top bezel above it and a bottom bezel below.
 #define LCD_X 0
-#define LCD_Y 24
+#define LCD_Y 28    // leaves the top bezel tall enough for its Gothic 24 text
 #define LCD_W 200
-#define LCD_H 176
+#define LCD_H 172
 
 // Row 1: weekday (left) and the 2x2 indicator box (right).
 #define WEEKDAY_X 12
 #define WEEKDAY_NARROW_X 6  // the narrowed weekday, followed by the day of the month
-#define WEEKDAY_Y 34
+#define WEEKDAY_Y 36
 #define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
 #define BOX_RIGHT 191   // indicator box, right outer line
-#define BOX_DIV 150     // indicator box, vertical divider (off-centre: MUTE is widest)
-#define BOX_TOP 34      // indicator box, top outer line (= weekday top)
-#define BOX_BOTTOM 62   // indicator box, bottom outer line (= weekday bottom)
-#define BOX_MID 48      // indicator box, middle divider
+#define BOX_DIV 152     // indicator box, vertical divider (off-centre: the left column has MUTE, the widest)
+#define BOX_TOP 36      // indicator box, top outer line (= weekday top)
+#define BOX_BOTTOM 64   // indicator box, bottom outer line (= weekday bottom)
+#define BOX_MID 50      // indicator box, middle divider
 #define BOX_RADIUS 6    // indicator box, radius of the rounded corners
 #define LABEL_H 10      // indicator label height in rows
 
@@ -618,7 +618,9 @@ static void apply_backlight(void) {
 #define TEMP_DEG_X 188
 
 // Bezels.
-#define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
+#define TOP_RIGHT_MAX 124  // widest the top-right bezel text may be
+#define TOP_CAP 6          // top of the top bezel's 14px capitals (centred in the bezel)
+#define BEZEL_MARGIN 6     // the top bezel texts' distance from the screen edges, and from each other
 #define BOTTOM_CAP 208     // top of the bottom bezel's 14px capitals (centred in the bezel)
 
 static const char *const DAYS[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
@@ -652,7 +654,7 @@ static void draw_bezel_text(GContext *ctx, const char *text, int x, int y, int w
 #define FIT_MAX_W 40  // the widest indicator cell is 39 px,
 #define FIT_MAX_H 12  // and every cell is 12 rows tall
 #define FIT_MAX_LETTERS 8
-_Static_assert(BOX_RIGHT - BOX_DIV - 2 <= FIT_MAX_W && BOX_DIV - BOX_LEFT - 4 <= FIT_MAX_W,
+_Static_assert(BOX_RIGHT - BOX_DIV - 2 <= FIT_MAX_W && BOX_DIV - BOX_LEFT - 3 <= FIT_MAX_W,
                "an indicator cell is wider than the label scratch buffer");
 _Static_assert(BOX_MID - BOX_TOP - 2 <= FIT_MAX_H && BOX_BOTTOM - BOX_MID - 2 <= FIT_MAX_H,
                "an indicator cell is taller than the label scratch buffer");
@@ -1035,10 +1037,12 @@ static void draw_lcd(void) {
   else draw_temperature();
 }
 
-// Top bezel (smaller Gothic 18 bold font): the battery level and step count, or
-// the custom texts when those are switched off. The right text takes the width
-// it needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
+// Top bezel (Gothic 24 bold, like the bottom bezel): the battery level and step count, or
+// the custom texts when those are switched off. The right text takes the width it needs (up
+// to TOP_RIGHT_MAX) and the left text gets the rest. When the battery level doesn't fit
+// there, it drops the word "BATT" rather than being cut short.
 static void draw_top_bezel(GContext *ctx) {
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   char left[24], right[24];
   if (s_settings.show_battery) {
     snprintf(left, sizeof(left), "BATT %d%%", s_battery.charge_percent);
@@ -1054,12 +1058,18 @@ static void draw_top_bezel(GContext *ctx) {
   } else {
     snprintf(right, sizeof(right), "-- STEPS");
   }
-  int right_w = graphics_text_layout_get_content_size(
-      right, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0, 0, 190, 22),
-      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 4;
+  const GRect measure = GRect(0, 0, PBL_DISPLAY_WIDTH, 30);
+  int right_w = graphics_text_layout_get_content_size(right, font, measure,
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 2;
   if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
-  draw_text(ctx, right, GRect(190 - right_w, -2, right_w, 22), GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
-  draw_text(ctx, left, GRect(10, -2, 190 - right_w - 14, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  const int left_w = PBL_DISPLAY_WIDTH - right_w - 3 * BEZEL_MARGIN;
+  if (s_settings.show_battery && graphics_text_layout_get_content_size(left, font, measure,
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w > left_w) {
+    snprintf(left, sizeof(left), "%d%%", s_battery.charge_percent);
+  }
+  draw_bezel_text(ctx, right, PBL_DISPLAY_WIDTH - BEZEL_MARGIN - right_w, TOP_CAP, right_w,
+                  GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
+  draw_bezel_text(ctx, left, BEZEL_MARGIN, TOP_CAP, left_w, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
 // Bottom bezel (larger text): the WR badge (or HR badge and heart rate) and the
@@ -1083,7 +1093,8 @@ static void draw_bottom_bezel(GContext *ctx) {
 // saving time is in effect in the watch's time zone (the phone provides the zone; the watch's
 // own clock knows when DST applies). Each is fitted to LABEL_H rows and centred vertically in
 // its cell (the cells are the rows between the 2px frame and the middle divider); "BT" is also
-// widened. The CHG and DST cells stop 1px short of the rounded corners that intrude.
+// widened. Active labels gather on the right (BT, DST), the usually inactive ones on the left
+// (CHG, MUTE). The BT and MUTE cells stop 1px short of the rounded corners that intrude.
 static void draw_indicator_labels(GContext *ctx) {
   const int top_h = BOX_MID - BOX_TOP - 2, bottom_h = BOX_BOTTOM - BOX_MID - 2;
   const int left_w = BOX_DIV - BOX_LEFT, right_w = BOX_RIGHT - BOX_DIV;
@@ -1092,13 +1103,13 @@ static void draw_indicator_labels(GContext *ctx) {
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   struct { const char *label; bool on; GRect cell; const int8_t *letter_w; int letter_w_n; } ind[] = {
     { "BT",   s_connected,
-      GRect(BOX_LEFT + 4, BOX_TOP + 2, left_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
+      GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
     { full ? "FULL" : "CHG", s_battery.is_charging || full,
-      GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), NULL, 0 },
+      GRect(BOX_LEFT + 2, BOX_TOP + 2, left_w - 3, top_h), NULL, 0 },
     { "DST",  s_now.tm_isdst > 0,
-      GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
-    { "MUTE", s_quiet,
       GRect(BOX_DIV + 1, BOX_MID + 1, right_w - 2, bottom_h), NULL, 0 },
+    { "MUTE", s_quiet,
+      GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
   };
   for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
     if (!ind[i].on && !s_settings.ghosts) continue;
