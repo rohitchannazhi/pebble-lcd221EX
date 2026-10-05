@@ -952,22 +952,27 @@ static void draw_temperature(void) {
   draw_dots(TEMP_X + 180 + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// The date box's alternative to the date: today's low and high side by side, under the DST
-// label and bottom-aligned with where the date was. Each is a down or up arrow, a sign slot
-// (minus, or the "1" of 100+), two small digits and a degree mark.
-#define RANGE_DIGIT_W 10
-#define RANGE_DIGIT_H 22
-#define RANGE_GROUP_W 52  // from one arrow to the next
-static void draw_range_group(int x, int t10, bool valid, const char *arrow, GColor ink) {
+// The date box's alternative to the date: today's low and high side by side, as tall as the
+// date's digits and bottom-aligned with them, with a down or up arrow centred above each and a
+// short divider between them (the DST label moves up between the arrows, see draw_dst_label).
+// Each value is a sign slot (minus, or the "1" of 100+), two digits and a degree mark.
+#define RANGE_DIGIT_W 12
+#define RANGE_DIGIT_H 26
+#define RANGE_LOW_X 3     // left edge of the low's sign slot
+#define RANGE_HIGH_X 58   // and of the high's
+#define RANGE_DIV_X 53    // the divider between them
+#define RANGE_ARROW_Y 159
+#define RANGE_DST_X 37    // the DST label, centred between the arrows
+static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
-  // Sign slot, the two digits and the degree mark, after the arrow.
-  const int sx = x + 9, d1 = x + 17, d2 = x + 29, gx = x + 40;
+  const int d1 = x + 9, d2 = x + 24, gx = x + 38;  // the two digits and the degree mark
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
-  // The sign slot has no unlit ghost at this size: it would crowd the small digits.
-  if (neg) draw_segments(sx, y, 7, h, SEG_G, SEG_G, ink);
-  if (hundred) draw_segments(sx - 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  // The arrow is centred over the digits' (slanted) tops.
+  draw_dots(d1 + (d2 + w - d1) / 2 - 5 + h * s_slant / 1000, RANGE_ARROW_Y, arrow, 11, 6, 1, 1, true, ink);
+  // The sign slot has no unlit ghost at this size: it would crowd the digits.
+  if (neg) draw_segments(x, y, 7, h, SEG_G, SEG_G, ink);
+  if (hundred) draw_segments(x - 4, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
@@ -985,11 +990,25 @@ static void draw_range_group(int x, int t10, bool valid, const char *arrow, GCol
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] = "...#.....###...#####.#######";
-  static const char DOWN[] = "#######.#####...###.....#...";
+  static const char UP[] =
+    ".....#....."
+    "....###...."
+    "...#####..."
+    "..#######.."
+    ".#########."
+    "###########";
+  static const char DOWN[] =
+    "###########"
+    ".#########."
+    "..#######.."
+    "...#####..."
+    "....###...."
+    ".....#.....";
   const bool valid = range_valid();
-  draw_range_group(4, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
-  draw_range_group(4 + RANGE_GROUP_W, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
+  draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
+  draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
+  const int top = ROW3_Y + ROW3_H - RANGE_DIGIT_H - 2;
+  fill(RANGE_DIV_X, top, 1, ROW3_Y + ROW3_H + 2 - top, s_col[COL_RULES], false);
 }
 
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
@@ -1110,7 +1129,9 @@ static void draw_indicator_labels(GContext *ctx) {
 static void draw_dst_label(GContext *ctx) {
   const bool on = s_now.tm_isdst > 0;
   if (!on && !s_settings.ghosts) return;
-  draw_fitted_text(ctx, "DST", GRect(DST_X, DST_Y, DST_W, DST_H), NULL, 0, LABEL_H,
+  // With the high and low in the date box, it sits between their arrows.
+  const int x = s_settings.date_range ? RANGE_DST_X : DST_X;
+  draw_fitted_text(ctx, "DST", GRect(x, DST_Y, DST_W, DST_H), NULL, 0, LABEL_H,
                    on ? s_col[COL_DST] : s_ghost, on ? DENSITY_FULL : s_label_off_density);
 }
 

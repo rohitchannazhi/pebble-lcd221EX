@@ -49,7 +49,7 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "DateBox", "label": "Date box shows", "defaultValue": "date",
-        "description": "Min / max shows today's low and high side by side, for where your phone is, and the day of the month moves up next to the weekday (MON 05).",
+        "description": "Min / max shows today's low (▼) and high (▲) side by side, for where your phone is, and the day of the month moves up next to the weekday (MON 05).",
         "options": [
           { "label": "Date", "value": "date" },
           { "label": "Today's min / max temperature", "value": "minmax" }
