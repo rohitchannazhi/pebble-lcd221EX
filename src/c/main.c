@@ -99,7 +99,7 @@ typedef struct {
   uint8_t seconds_burst_s;     // how many seconds they tick for
   uint8_t hour_no_zero;        // 1: 24-hour time has no leading zero (7:05, like the original)
   uint8_t date_pad;            // single-digit date numbers: PAD_ZERO (06-05), PAD_FIRST_BLANK ( 6-05), PAD_BOTH_BLANK ( 6- 5)
-  uint8_t right_range;         // 1: the right box shows today's high and low instead of the temperature
+  uint8_t date_range;          // 1: the date box shows today's high and low; the day of the month moves up next to the weekday
 } Settings;
 
 typedef struct {
@@ -480,10 +480,12 @@ static void draw_matrix(int x, int y, const char *bits, int cols, int rows, int 
 }
 
 // Day-of-week text: 5x5 letters with 4x5 dots on a 5x6 grid, one column apart.
-// Upright, like the W-221H's.
-static void draw_day(int x, int y, const char *text, GColor ink) {
+// Upright, like the W-221H's. `narrow` letters (3x5 dots on a 4x6 grid, 22px apart) leave
+// room for the day of the month after them.
+static void draw_day(int x, int y, const char *text, bool narrow, GColor ink) {
   for (int i = 0; text[i]; i++) {
-    draw_matrix(x + i * 30, y, day_glyph(text[i]), 5, 5, 5, 6, 4, 5, ink);
+    if (narrow) draw_matrix(x + i * 22, y, day_glyph(text[i]), 5, 5, 4, 6, 3, 5, ink);
+    else draw_matrix(x + i * 30, y, day_glyph(text[i]), 5, 5, 5, 6, 4, 5, ink);
   }
 }
 
@@ -582,6 +584,7 @@ static void apply_backlight(void) {
 
 // Row 1: weekday (left) and the 2x2 indicator box (right).
 #define WEEKDAY_X 12
+#define WEEKDAY_NARROW_X 8  // the narrowed weekday, followed by the day of the month
 #define WEEKDAY_Y 34
 #define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
 #define BOX_RIGHT 191   // indicator box, right outer line
@@ -896,6 +899,15 @@ static void draw_date(void) {
   draw_digit(86, y, w, h, second % 10, ink);
 }
 
+// With the date box showing the high and low: the day of the month after the (narrowed) weekday,
+// in 7-segment digits as tall as the weekday letters, so the row reads e.g. "MON 05".
+static void draw_month_day(void) {
+  const int d = s_now.tm_mday, w = 12, h = BOX_BOTTOM - BOX_TOP;
+  const bool blank = d < 10 && s_settings.date_pad != PAD_ZERO;
+  draw_digit(78, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
+  draw_digit(93, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
+}
+
 // Right box, option 1: the seconds, two digits centred in the box.
 static void draw_seconds(void) {
   const GColor ink = s_col[COL_RIGHT];
@@ -940,19 +952,20 @@ static void draw_temperature(void) {
   draw_dots(TEMP_X + 180 + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// Right box, option 3: today's high (top row) and low (bottom row), each in small digits after
-// an up or down arrow: a sign slot (minus, or the "1" of 100+), two digits and a degree mark.
-#define RANGE_DIGIT_W 11
-#define RANGE_DIGIT_H 16
+// The date box's alternative to the date: today's high (top row) and low (bottom row), each in
+// small digits after an up or down arrow: a sign slot (minus, or the "1" of 100+), two digits
+// and a degree mark. The rows start at RANGE_X, right of the DST label.
+#define RANGE_X 44
+#define RANGE_DIGIT_W 12
+#define RANGE_DIGIT_H 18
 static void draw_range_row(int y, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W;
-  const int ax = 124, sx = 136, d1 = 148, d2 = 163, gx = 178;  // arrow, sign slot, digits, degree
+  // Arrow, sign slot, the two digits and the degree mark.
+  const int ax = RANGE_X, sx = RANGE_X + 14, d1 = RANGE_X + 26, d2 = RANGE_X + 42, gx = RANGE_X + 57;
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  draw_dots(ax + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
-  // As in draw_temperature: unlit parts first, so the lit one is never covered by a ghost.
-  if (!neg) draw_segments(sx, y, 8, h, 0, SEG_G, ink);
-  if (!hundred) draw_segments(sx - 3, y, w, h, 0, SEG_B | SEG_C, ink);
+  draw_dots(ax + (h / 2) * s_slant / 1000, y + (h - 5) / 2, arrow, 9, 5, 1, 1, true, ink);
+  // The sign slot has no unlit ghost at this size: it would crowd the small digits.
   if (neg) draw_segments(sx, y, 8, h, SEG_G, SEG_G, ink);
   if (hundred) draw_segments(sx - 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
@@ -972,11 +985,21 @@ static void draw_range_row(int y, int t10, bool valid, const char *arrow, GColor
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] = "...#.....###...#####.#######";
-  static const char DOWN[] = "#######.#####...###.....#...";
+  static const char UP[] =
+    "....#...."
+    "...###..."
+    "..#####.."
+    ".#######."
+    "#########";
+  static const char DOWN[] =
+    "#########"
+    ".#######."
+    "..#####.."
+    "...###..."
+    "....#....";
   const bool valid = range_valid();
-  draw_range_row(ROW3_Y, s_weather.temp_max, valid, UP, s_col[COL_RIGHT]);
-  draw_range_row(ROW3_Y + ROW3_H - RANGE_DIGIT_H, s_weather.temp_min, valid, DOWN, s_col[COL_RIGHT]);
+  draw_range_row(ROW3_Y - 2, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
+  draw_range_row(ROW3_Y + ROW3_H - RANGE_DIGIT_H, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
 }
 
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
@@ -996,14 +1019,16 @@ static bool seconds_showing(void) {
 
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
-  draw_day(WEEKDAY_X, WEEKDAY_Y, DAYS[s_now.tm_wday], s_col[COL_WEEKDAY]);
+  draw_day(s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X, WEEKDAY_Y, DAYS[s_now.tm_wday],
+           s_settings.date_range, s_col[COL_WEEKDAY]);
+  if (s_settings.date_range) draw_month_day();
   draw_indicator_frame();
   draw_time();
   fill(LCD_X, ROW3_LINE_Y, LCD_W, 2, s_col[COL_RULES], false);
   fill(ROW3_DIV_X, ROW3_LINE_Y, 2, LCD_Y + LCD_H - ROW3_LINE_Y, s_col[COL_RULES], false);
-  draw_date();
+  if (s_settings.date_range) draw_temperature_range();
+  else draw_date();
   if (seconds_showing()) draw_seconds();
-  else if (s_settings.right_range && !s_settings.show_seconds) draw_temperature_range();
   else draw_temperature();
 }
 
@@ -1145,10 +1170,12 @@ static void request_weather(void) {
 // screen (not the seconds), the phone is connected, and the last reading is not recent.
 // Each request wakes the phone app for a location fix and a web request.
 static void refresh_weather_if_needed(void) {
-  // The temperature is on screen unless the seconds are always shown.
-  if ((s_settings.show_seconds && !s_settings.seconds_on_shake) || !s_connected) return;
+  // The temperature is on screen unless the seconds are always shown (and the date box shows
+  // the date).
+  if ((s_settings.show_seconds && !s_settings.seconds_on_shake && !s_settings.date_range) ||
+      !s_connected) return;
   // A recent reading is enough, except when the high and low on screen belong to yesterday.
-  const bool stale_range = s_settings.right_range && !s_settings.show_seconds && !range_valid();
+  const bool stale_range = s_settings.date_range && !range_valid();
   if (!stale_range && s_weather.updated != 0 &&
       time(NULL) - s_weather.updated < (WEATHER_REFRESH_MIN - 5) * 60) return;
   request_weather();
@@ -1447,6 +1474,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.hour_no_zero = tuple_int(t) ? 0 : 1;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_DateBox))) {
+    s_settings.date_range = strcmp(t->value->cstring, "minmax") == 0 ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_DatePadding))) {
     const char *p = t->value->cstring;
     s_settings.date_pad = strcmp(p, "first") == 0 ? PAD_FIRST_BLANK : strcmp(p, "both") == 0 ? PAD_BOTH_BLANK : PAD_ZERO;
@@ -1455,7 +1486,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   // Right box
   if ((t = dict_find(iter, MESSAGE_KEY_RightBox))) {
     s_settings.show_seconds = strcmp(t->value->cstring, "seconds") == 0;
-    s_settings.right_range = strcmp(t->value->cstring, "minmax") == 0 ? 1 : 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_SecondsMode))) {
@@ -1627,7 +1657,7 @@ static void init(void) {
   if (s_settings.seconds_on_shake > 1) s_settings.seconds_on_shake = 0;
   if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
   if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
-  if (s_settings.right_range > 1) s_settings.right_range = 0;
+  if (s_settings.date_range > 1) s_settings.date_range = 0;
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
     s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
   }

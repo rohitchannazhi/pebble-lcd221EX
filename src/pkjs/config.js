@@ -48,6 +48,14 @@ module.exports = [
         "description": "24-hour format only. Off shows 7:05 instead of 07:05, like the original watch."
       },
       {
+        "type": "select", "messageKey": "DateBox", "label": "Date box shows", "defaultValue": "date",
+        "description": "Min / max shows today's high (top) and low (bottom) where your phone is, and the day of the month moves up next to the weekday (MON 05).",
+        "options": [
+          { "label": "Date", "value": "date" },
+          { "label": "Today's min / max temperature", "value": "minmax" }
+        ]
+      },
+      {
         "type": "select", "messageKey": "DateFormat", "label": "Date format", "defaultValue": "DM",
         "options": [
           { "label": "DD-MM", "value": "DM" },
@@ -72,10 +80,9 @@ module.exports = [
       {
         "type": "select", "messageKey": "RightBox", "label": "Right box shows",
         "defaultValue": "temperature",
-        "description": "Min / max shows today's high (top) and low (bottom) where your phone is. Seconds redraw the watch face every second, which uses more battery.",
+        "description": "Seconds redraw the watch face every second, which uses more battery.",
         "options": [
           { "label": "Temperature", "value": "temperature" },
-          { "label": "Today's min / max temperature", "value": "minmax" },
           { "label": "Seconds", "value": "seconds" }
         ]
       },
@@ -226,7 +233,7 @@ module.exports = [
       colorItem("ColPm", "PM marker", "000000"),
       colorHeading("Date and right box"),
       colorItem("ColDst", "DST label", "000000"),
-      colorItem("ColDate", "Date", "000000"),
+      colorItem("ColDate", "Date / min-max temperature", "000000"),
       colorItem("ColRules", "Divider lines", "000000"),
       colorItem("ColRight", "Temperature / seconds", "000000")
     ]

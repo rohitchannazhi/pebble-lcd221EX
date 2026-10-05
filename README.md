@@ -17,11 +17,11 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 | Area | Content |
 |---|---|
 | Top bezel | Battery level and step count, or your own text instead of either (settings) |
-| Weekday | Dot-matrix day name (SUN, MON, ...) |
+| Weekday | Dot-matrix day name (SUN, MON, ...). While the date box shows the high and low, the letters are narrower and the day of the month follows them (`MON05`) |
 | Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **SIG** an audible hourly chime is set, Quiet Time is off and the watch's speaker is not muted, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |
-| Date | DD-MM or MM-DD. A **DST** label above it lights while daylight saving time is in effect in your time zone |
-| Right box | Temperature (°C or °F), today's high and low, or seconds |
+| Date box | DD-MM or MM-DD, or today's high (▲, top) and low (▼, bottom) temperature (settings). A **DST** label in its top-left corner lights while daylight saving time is in effect in your time zone |
+| Right box | Temperature (°C or °F) or seconds |
 | Bottom bezel | A **WR** badge (or **HR** and your latest heart rate) and a text label |
 
 Notes:
@@ -42,9 +42,10 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 |---|---|---|
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
 | | Leading zero in the hour | On (07:05), Off (`7:05`, like the original). 24-hour format only; not shown while 12-hour is selected |
-| | Date format | DD-MM, MM-DD |
-| | Single-digit dates | **Leading zeros** (`06-05`), blank first number only (` 6-05`), or blank both numbers (` 6- 5`, like the original) |
-| Right box | Right box shows | Temperature, Today's min / max temperature (the high on top after an up arrow, the low below after a down arrow, for the day where your phone is; `--` until the first reading of the day), Seconds (redraws every second: uses more battery) |
+| | Date box shows | Date, Today's min / max temperature (the high on top, the low below, for the day where your phone is; `--` until the first weather reading of the day). With min / max, the day of the month moves up next to the weekday (`MON05`) |
+| | Date format | DD-MM, MM-DD (not shown while the date box shows min / max) |
+| | Single-digit dates | **Leading zeros** (`06-05`), blank first number only (` 6-05`), or blank both numbers (` 6- 5`, like the original). With min / max in the date box, the day next to the weekday follows this too (`MON 5` unless leading zeros) |
+| Right box | Right box shows | Temperature, Seconds (redraws every second: uses more battery) |
 | | Temperature unit | **Follow watch** (Fahrenheit when the watch uses imperial units, otherwise Celsius), Celsius, Fahrenheit (shown while the temperature can be on screen) |
 | | Seconds ticking | **Always** (every second, the default), or after a wrist shake. Shown only while the right box shows seconds; the right box shows the temperature the rest of the time |
 | | Seconds duration | 30 s. 5 to 120 in steps of 5: how long the seconds tick after a shake (shown only for "After a wrist shake") |
@@ -64,7 +65,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | | LCD panel | LCD window edge, LCD background, unlit segments and labels |
 | | Weekday and indicators | Weekday, indicator box outline, BT, CHG / FULL, SIG, MUTE |
 | | Time | Hour digits, colon, minute digits, PM marker |
-| | Date and right box | DST label, date, divider lines, temperature / seconds (including the degree mark) |
+| | Date and right box | DST label, date / min-max temperature, divider lines, temperature / seconds (including the degree mark) |
 | Alerts | Vibrate on phone disconnect | Double pulse (None, Short, Long, Double, Triple, Heartbeat, SOS) |
 | | Vibrate on phone reconnect | Short pulse (same patterns) |
 | | Hourly chime | Off, LCD Classic (two 4096 Hz beeps, like a digital watch's hourly signal), Doorbell, Big Ben (the first bar of the full-hour Westminster chime), Super (the first bar of a well-known video-game theme), Vibration only. Played at the top of the hour while the watch face is showing; choosing a sound plays it once when you save |
