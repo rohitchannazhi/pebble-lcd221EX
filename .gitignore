@@ -1,0 +1,8 @@
+# Build output and tooling
+build/
+.lock-waf_*
+node_modules/
+.env
+
+# Store upload copy of the release file
+store/*.pbw
