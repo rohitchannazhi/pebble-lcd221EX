@@ -20,7 +20,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 | Weekday | Dot-matrix day name (SUN, MON, ...). While the date box shows the high and low, the letters are narrower and the day of the month follows them (`MON05`) |
 | Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |
-| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each under a ▼ / ▲ arrow with a divider between them (settings). |
+| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each after a ▼ / ▲ arrow with a divider between them (settings). |
 | Right box | Temperature (°C or °F) or seconds |
 | Bottom bezel | A **WR** badge (or **HR** and your latest heart rate) and a text label |
 
@@ -42,7 +42,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 |---|---|---|
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
 | | Leading zero in the hour | On (07:05), Off (`7:05`, like the original). 24-hour format only; not shown while 12-hour is selected |
-| | Date box shows | Date, Today's min / max temperature (the low then the high, side by side under ▼ / ▲ arrows, for the day where your phone is; `--` until the first weather reading of the day). With min / max, the day of the month moves up next to the weekday (`MON05`) |
+| | Date box shows | Date, Today's min / max temperature (the low then the high, side by side after ▼ / ▲ arrows, for the day where your phone is; `--` until the first weather reading of the day). With min / max, the day of the month moves up next to the weekday (`MON05`) |
 | | Date format | DD-MM, MM-DD (not shown while the date box shows min / max) |
 | | Single-digit dates | **Leading zeros** (`06-05`), blank first number only (` 6-05`), or blank both numbers (` 6- 5`, like the original). With min / max in the date box, the day next to the weekday follows this too (`MON 5` unless leading zeros) |
 | Right box | Right box shows | Temperature, Seconds (redraws every second: uses more battery) |

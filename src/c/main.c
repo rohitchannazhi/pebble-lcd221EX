@@ -604,10 +604,18 @@ static void apply_backlight(void) {
 
 // Row 3: date (left) and seconds / temperature (right), under a 2px rule.
 #define ROW3_LINE_Y 154
-#define ROW3_DIV_X 110  // vertical divider between the date and the right box
+#define ROW3_DIV_X 126  // vertical divider between the date box and the right box
 #define ROW3_Y 160      // top of the right box's digits
 #define ROW3_H 36       // height of the right box's digits
-#define TEMP_X 3        // horizontal offset of the whole temperature group (sign, digits, degree)
+// The right box's digits (seconds, temperature) and the temperature's parts: the sign slot's
+// minus, the full-width digit whose right verticals make the "1" of 100+, the two digits and
+// the degree mark.
+#define RIGHT_DIGIT_W 19
+#define TEMP_MINUS_X 130
+#define TEMP_ONE_X 121
+#define TEMP_D1_X 144
+#define TEMP_D2_X 166
+#define TEMP_DEG_X 188
 
 // Bezels.
 #define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
@@ -872,8 +880,8 @@ static void draw_time(void) {
 }
 
 // The date as "DD-MM" or "MM-DD". As on the W-221H, its digits are about 72% as
-// tall as the right box's and share their baseline (so the time stands out); the
-// last digit ends where it did before, ~19px short of the divider.
+// tall as the right box's and share their baseline (so the time stands out), centred
+// in the date box.
 static void draw_date(void) {
   const GColor ink = s_col[COL_DATE];
   int first = s_settings.day_first ? s_now.tm_mday : s_now.tm_mon + 1;
@@ -882,11 +890,11 @@ static void draw_date(void) {
   const int y = ROW3_Y + ROW3_H - h;  // bottom aligned with the right box's digits
   const bool blank_first = s_settings.date_pad != PAD_ZERO;
   const bool blank_second = s_settings.date_pad == PAD_BOTH_BLANK;
-  draw_digit(19, y, w, h, (first >= 10 || !blank_first) ? first / 10 : DIGIT_BLANK, ink);
-  draw_digit(38, y, w, h, first % 10, ink);
-  draw_segments(56, y, 8, h, SEG_G, SEG_G, ink);  // dash: the font's middle bar
-  draw_digit(67, y, w, h, (second >= 10 || !blank_second) ? second / 10 : DIGIT_BLANK, ink);
-  draw_digit(86, y, w, h, second % 10, ink);
+  draw_digit(27, y, w, h, (first >= 10 || !blank_first) ? first / 10 : DIGIT_BLANK, ink);
+  draw_digit(46, y, w, h, first % 10, ink);
+  draw_segments(64, y, 8, h, SEG_G, SEG_G, ink);  // dash: the font's middle bar
+  draw_digit(75, y, w, h, (second >= 10 || !blank_second) ? second / 10 : DIGIT_BLANK, ink);
+  draw_digit(94, y, w, h, second % 10, ink);
 }
 
 // With the date box showing the high and low: the day of the month after the (narrowed) weekday,
@@ -901,8 +909,8 @@ static void draw_month_day(void) {
 // Right box, option 1: the seconds, two digits centred in the box.
 static void draw_seconds(void) {
   const GColor ink = s_col[COL_RIGHT];
-  draw_digit(131, ROW3_Y, 22, ROW3_H, s_now.tm_sec / 10, ink);
-  draw_digit(156, ROW3_Y, 22, ROW3_H, s_now.tm_sec % 10, ink);
+  draw_digit(143, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec / 10, ink);
+  draw_digit(165, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec % 10, ink);
 }
 
 // Right box, option 2: the temperature. A half-width sign slot (minus, or the
@@ -917,17 +925,18 @@ static void draw_temperature(void) {
   // The minus is the font's middle bar in a narrow box; the "1" is the right
   // verticals of a full-width digit placed so they land in the sign slot.
   // Unlit parts go first so the lit one is never covered by a ghost.
-  if (!neg) draw_segments(TEMP_X + 111, dy, 16, dh, 0, SEG_G, ink);
-  if (!hundred) draw_segments(TEMP_X + 102, dy, 22, dh, 0, SEG_B | SEG_C, ink);
-  if (neg) draw_segments(TEMP_X + 111, dy, 16, dh, SEG_G, SEG_G, ink);
-  if (hundred) draw_segments(TEMP_X + 102, dy, 22, dh, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  const int w = RIGHT_DIGIT_W;
+  if (!neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, 0, SEG_G, ink);
+  if (!hundred) draw_segments(TEMP_ONE_X, dy, w, dh, 0, SEG_B | SEG_C, ink);
+  if (neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, SEG_G, SEG_G, ink);
+  if (hundred) draw_segments(TEMP_ONE_X, dy, w, dh, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
-    draw_digit(TEMP_X + 129, dy, 22, dh, DIGIT_MINUS, ink);
-    draw_digit(TEMP_X + 154, dy, 22, dh, DIGIT_MINUS, ink);
+    draw_digit(TEMP_D1_X, dy, w, dh, DIGIT_MINUS, ink);
+    draw_digit(TEMP_D2_X, dy, w, dh, DIGIT_MINUS, ink);
   } else {
     int tens = (v >= 10) ? v / 10 % 10 : DIGIT_BLANK;
-    draw_digit(TEMP_X + 129, dy, 22, dh, tens, ink);
-    draw_digit(TEMP_X + 154, dy, 22, dh, v % 10, ink);
+    draw_digit(TEMP_D1_X, dy, w, dh, tens, ink);
+    draw_digit(TEMP_D2_X, dy, w, dh, v % 10, ink);
   }
   // Degree mark: a round 7x7 ring, 2px thick, shifted with the digits' slanted
   // top edge.
@@ -939,29 +948,28 @@ static void draw_temperature(void) {
     "##...##"
     ".#####."
     "..###..";
-  draw_dots(TEMP_X + 180 + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
+  draw_dots(TEMP_DEG_X + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// The date box's alternative to the date: today's low and high side by side, as tall as the
-// date's digits and bottom-aligned with them, with a down or up arrow centred above each and a
-// short divider between them.
-// Each value is a sign slot (minus, or the "1" of 100+), two digits and a degree mark.
-#define RANGE_DIGIT_W 12
-#define RANGE_DIGIT_H 26
-#define RANGE_LOW_X 3     // left edge of the low's sign slot
-#define RANGE_HIGH_X 58   // and of the high's
-#define RANGE_DIV_X 53    // the divider between them
-#define RANGE_ARROW_Y 159
+// The date box's alternative to the date: today's low and high side by side, bottom-aligned
+// with the right box's digits, with a short divider between them. Each is a down or up arrow,
+// a sign slot (minus, or the "1" of 100+) and two digits; no degree mark (the right box's
+// temperature has one, and the space goes to bigger digits).
+#define RANGE_DIGIT_W 14
+#define RANGE_DIGIT_H 30
+#define RANGE_LOW_X 2     // left edge of the low's arrow
+#define RANGE_HIGH_X 68   // and of the high's
+#define RANGE_DIV_X 62    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
-  const int d1 = x + 9, d2 = x + 24, gx = x + 38;  // the two digits and the degree mark
+  const int sx = x + 10, d1 = x + 18, d2 = x + 35;  // sign slot and digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  // The arrow is centred over the digits' (slanted) tops.
-  draw_dots(d1 + (d2 + w - d1) / 2 - 5 + h * s_slant / 1000, RANGE_ARROW_Y, arrow, 11, 6, 1, 1, true, ink);
+  // The arrow sits level with the middle of the digits, shifted with their slant.
+  draw_dots(x + (h / 2) * s_slant / 1000, y + (h - 4) / 2, arrow, 7, 4, 1, 1, true, ink);
   // The sign slot has no unlit ghost at this size: it would crowd the digits.
-  if (neg) draw_segments(x, y, 7, h, SEG_G, SEG_G, ink);
-  if (hundred) draw_segments(x - 4, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  if (neg) draw_segments(sx, y, 7, h, SEG_G, SEG_G, ink);
+  if (hundred) draw_segments(sx - 8, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
@@ -969,30 +977,11 @@ static void draw_range_value(int x, int t10, bool valid, const char *arrow, GCol
     draw_digit(d1, y, w, h, (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
     draw_digit(d2, y, w, h, v % 10, ink);
   }
-  static const char DEGREE_SMALL[] =
-    ".###."
-    "#...#"
-    "#...#"
-    "#...#"
-    ".###.";
-  draw_dots(gx + (h - 3) * s_slant / 1000, y, DEGREE_SMALL, 5, 5, 1, 1, true, ink);
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] =
-    ".....#....."
-    "....###...."
-    "...#####..."
-    "..#######.."
-    ".#########."
-    "###########";
-  static const char DOWN[] =
-    "###########"
-    ".#########."
-    "..#######.."
-    "...#####..."
-    "....###...."
-    ".....#.....";
+  static const char UP[] = "...#.....###...#####.#######";
+  static const char DOWN[] = "#######.#####...###.....#...";
   const bool valid = range_valid();
   draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
   draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
