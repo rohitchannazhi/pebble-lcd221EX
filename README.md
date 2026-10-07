@@ -16,7 +16,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 
 | Area | Content |
 |---|---|
-| Top bezel | Battery level and step count, or your own text instead of either (settings) |
+| Top bezel | A battery icon (filled to the level, with a bolt while charging) and the level, and a walking figure and the step count; or your own text instead of either (settings) |
 | Weekday | Dot-matrix day name (SUN, MON, ...). While the date box shows the high and low, the letters are narrower and the day of the month follows them (`MON05`) |
 | Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |

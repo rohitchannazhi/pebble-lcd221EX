@@ -4,3 +4,5 @@ Removed: the hourly chime's sounds. "Vibrate on the hour" replaces it (a chime s
 New: two charcoal case colors, dotted and checkerboard, which set a black (inverted) LCD apart from the case.
 New: Digit style: the 7-segment digits, or one of three fonts (Oxanium, Chakra Petch, Wide) for all the text and numbers on the LCD.
 New: Divider lines: solid, segmented, ruler ticks, corner brackets or HUD chamfer.
+Changed: the top bar shows a battery icon and a walking figure instead of the words BATT and STEPS.
+Fixed: with corner brackets, the bottom row's numbers are centred between the brackets.

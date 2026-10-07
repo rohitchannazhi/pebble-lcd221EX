@@ -1024,6 +1024,14 @@ static void draw_time(void) {
   draw_digit(X[3], ty, tw, th, s_now.tm_min % 10, s_col[COL_MINUTES]);
 }
 
+// The bottom line of something `h` px tall in the bottom row: the right box's digit baseline, or,
+// with corner brackets, centred between the brackets' top and bottom rows.
+static int row3_base(int h) {
+  if (s_settings.line_style != LINES_BRACKETS) return ROW3_Y + ROW3_H;
+  const int top = ROW3_LINE_Y + 1, bottom = LCD_Y + LCD_H - 2;
+  return (top + bottom + 1) / 2 + h / 2;
+}
+
 // The date as "DD-MM" or "MM-DD". As on the W-221H, its digits are about 72% as
 // tall as the right box's and share their baseline (so the time stands out), centred
 // in the date box.
@@ -1032,14 +1040,15 @@ static void draw_date(void) {
   int first = s_settings.day_first ? s_now.tm_mday : s_now.tm_mon + 1;
   int second = s_settings.day_first ? s_now.tm_mon + 1 : s_now.tm_mday;
   const int w = 15, h = 26;
-  const int y = ROW3_Y + ROW3_H - h;  // bottom aligned with the right box's digits
+  const int y = row3_base(h) - h;  // bottom aligned with the right box's digits
   const bool blank_first = s_settings.date_pad != PAD_ZERO;
   const bool blank_second = s_settings.date_pad == PAD_BOTH_BLANK;
   if (font_active()) {
     char text[8];
     snprintf(text, sizeof(text), "%c%d-%c%d", (first >= 10 || !blank_first) ? '0' + first / 10 : ' ',
              first % 10, (second >= 10 || !blank_second) ? '0' + second / 10 : ' ', second % 10);
-    font_draw_text(FG_DATE, text, 0, ROW3_DIV_X, ROW3_Y + ROW3_H, ALIGN_CENTER, ink, DENSITY_FULL);
+    font_draw_text(FG_DATE, text, 0, ROW3_DIV_X, row3_base(font_height(FG_DATE)), ALIGN_CENTER, ink,
+                   DENSITY_FULL);
     return;
   }
   draw_digit(27, y, w, h, (first >= 10 || !blank_first) ? first / 10 : DIGIT_BLANK, ink);
@@ -1068,12 +1077,13 @@ static void draw_seconds(void) {
   const GColor ink = s_col[COL_RIGHT];
   if (font_active()) {
     char text[3] = { '0' + s_now.tm_sec / 10, '0' + s_now.tm_sec % 10, 0 };
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, ROW3_Y + ROW3_H, ALIGN_CENTER,
-                   ink, DENSITY_FULL);
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, row3_base(font_height(FG_RIGHT)),
+                   ALIGN_CENTER, ink, DENSITY_FULL);
     return;
   }
-  draw_digit(143, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec / 10, ink);
-  draw_digit(165, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec % 10, ink);
+  const int top = row3_base(ROW3_H) - ROW3_H;
+  draw_digit(143, top, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec / 10, ink);
+  draw_digit(165, top, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec % 10, ink);
 }
 
 // Right box, option 2: the temperature. A half-width sign slot (minus, or the
@@ -1081,7 +1091,7 @@ static void draw_seconds(void) {
 // while there is no recent weather.
 static void draw_temperature(void) {
   const GColor ink = s_col[COL_RIGHT];
-  const int dy = ROW3_Y, dh = ROW3_H;
+  const int dy = row3_base(ROW3_H) - ROW3_H, dh = ROW3_H;
   int temp = display_temp(s_weather.temp), v = abs(temp);
   bool valid = weather_valid();
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
@@ -1092,8 +1102,8 @@ static void draw_temperature(void) {
     if (!valid) snprintf(text, sizeof(text), "--%c", DEGREE_CHAR);
     else if (neg || hundred) snprintf(text, sizeof(text), "%d", temp);
     else snprintf(text, sizeof(text), "%d%c", temp, DEGREE_CHAR);
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 5, dy + dh, ALIGN_RIGHT, ink,
-                   DENSITY_FULL);
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 5, row3_base(font_height(FG_RIGHT)),
+                   ALIGN_RIGHT, ink, DENSITY_FULL);
     return;
   }
   // The minus is the font's middle bar in a narrow box; the "1" is the right
@@ -1137,7 +1147,7 @@ static void draw_temperature(void) {
 #define RANGE_DIV_X 60    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = font_active() ? font_height(FG_RANGE) : RANGE_DIGIT_H, w = RANGE_DIGIT_W;
-  const int y = ROW3_Y + ROW3_H - h;
+  const int y = row3_base(h) - h;
   const int d1 = x + 20, d2 = x + 37;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
@@ -1207,7 +1217,8 @@ static void draw_temperature_range(void) {
   const bool valid = range_valid();
   draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
   draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
-  draw_range_divider(RANGE_DIV_X, ROW3_Y + ROW3_H - RANGE_DIGIT_H - 2, ROW3_Y + ROW3_H + 1);
+  const int base = row3_base(RANGE_DIGIT_H);
+  draw_range_divider(RANGE_DIV_X, base - RANGE_DIGIT_H - 2, base + 1);
 }
 
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
@@ -1298,31 +1309,69 @@ static void draw_lcd(void) {
   else draw_temperature();
 }
 
-// Top bezel (smaller Gothic 18 bold font): the battery level and step count, or
-// the custom texts when those are switched off. The right text takes the width
-// it needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
+// A small 1-bit picture ('#' = ink), drawn pixel by pixel through the graphics API.
+static void draw_icon(GContext *ctx, int x, int y, const char *const *rows, int n, GColor color) {
+  graphics_context_set_fill_color(ctx, color);
+  for (int r = 0; r < n; r++) {
+    for (int c = 0; rows[r][c]; c++) {
+      if (rows[r][c] == '#') graphics_fill_rect(ctx, GRect(x + c, y + r, 1, 1), 0, GCornerNone);
+    }
+  }
+}
+
+// The battery icon: an 18x10 outline with a terminal, filled to the charge level, with a bolt
+// while charging (cut out of the fill, or drawn in the ink when the fill is too short for it).
+static void draw_battery_icon(GContext *ctx, int x, int y, GColor ink) {
+  static const char *const BOLT[] = { "..##", ".##.", "####", ".##.", "##.." };
+  const int pct = s_battery.charge_percent, fill = (14 * pct + 50) / 100;
+  graphics_context_set_stroke_color(ctx, ink);
+  graphics_draw_rect(ctx, GRect(x, y, 18, 10));
+  graphics_context_set_fill_color(ctx, ink);
+  graphics_fill_rect(ctx, GRect(x + 18, y + 3, 2, 4), 0, GCornerNone);
+  if (fill > 0) graphics_fill_rect(ctx, GRect(x + 2, y + 2, fill, 6), 0, GCornerNone);
+  if (s_battery.is_charging) draw_icon(ctx, x + 7, y + 2, BOLT, 5, fill > 6 ? s_col[COL_CASE] : ink);
+}
+
+// Top bezel (Gothic 18 bold): a battery icon and the level, and a walking figure and the step
+// count; or the custom texts when those are switched off. The right text takes the width it
+// needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
 static void draw_top_bezel(GContext *ctx) {
+  static const char *const WALKER[] = {
+    "...##.....", "...##.....", "..........", "..####....", ".#.###....", "#..##.##..",
+    "...##.....", "..#..#....", ".#...#....", "#.....#...", "......#...",
+  };
+  enum { ICON_GAP = 4, BATTERY_W = 20, WALKER_W = 10 };
   char left[24], right[24];
   if (s_settings.show_battery) {
-    snprintf(left, sizeof(left), "BATT %d%%", s_battery.charge_percent);
+    snprintf(left, sizeof(left), "%d%%", s_battery.charge_percent);
   } else {
     snprintf(left, sizeof(left), "%s", s_settings.top_left);
   }
   if (!s_settings.show_steps) {
     snprintf(right, sizeof(right), "%s", s_settings.top_right);
   } else if (s_steps >= 1000) {
-    snprintf(right, sizeof(right), "%d,%03d STEPS", s_steps / 1000, s_steps % 1000);
+    snprintf(right, sizeof(right), "%d,%03d", s_steps / 1000, s_steps % 1000);
   } else if (s_steps >= 0) {
-    snprintf(right, sizeof(right), "%d STEPS", s_steps);
+    snprintf(right, sizeof(right), "%d", s_steps);
   } else {
-    snprintf(right, sizeof(right), "-- STEPS");
+    snprintf(right, sizeof(right), "--");
   }
   int right_w = graphics_text_layout_get_content_size(
       right, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0, 0, 190, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 4;
   if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
   draw_text(ctx, right, GRect(190 - right_w, -2, right_w, 22), GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
-  draw_text(ctx, left, GRect(10, -2, 190 - right_w - 14, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  int right_start = 190 - right_w;
+  if (s_settings.show_steps) {  // the figure just left of the number
+    right_start -= WALKER_W + ICON_GAP;
+    draw_icon(ctx, right_start + 4, 5, WALKER, ARRAY_LENGTH(WALKER), s_col[COL_TOP_RIGHT]);
+  }
+  int left_x = 10;
+  if (s_settings.show_battery) {
+    draw_battery_icon(ctx, left_x, 6, s_col[COL_TOP_LEFT]);
+    left_x += BATTERY_W + ICON_GAP;
+  }
+  draw_text(ctx, left, GRect(left_x, -2, right_start - left_x - 4, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
 // Bottom bezel (larger text): the WR badge (or HR badge and heart rate) and the
