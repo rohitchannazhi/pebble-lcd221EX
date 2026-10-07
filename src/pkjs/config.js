@@ -190,6 +190,16 @@ module.exports = [
         ]
       },
       {
+        "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "grid",
+        "description": "How BT, CHG, DST and MUTE are shown next to the weekday.",
+        "options": [
+          { "label": "Grid", "value": "grid" },
+          { "label": "Pills", "value": "pills" },
+          { "label": "Active only", "value": "active" },
+          { "label": "Icons", "value": "icons" }
+        ]
+      },
+      {
         "type": "toggle", "messageKey": "Slanted", "label": "Slanted digits", "defaultValue": true,
         "description": "Lean the digits like the original watch. Straight digits are sharper."
       },

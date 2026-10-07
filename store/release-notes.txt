@@ -10,3 +10,4 @@ New: Leading zero in 12-hour time (07:05), with PM in the indicator box in place
 Changed: the LCD window edges follow the divider line style, and the bottom row is centred between the divider and the bottom of the LCD.
 Fixed: the face is centred left to right (the font clocks sat a little left), and with corner brackets the LCD's edge has brackets only at its corners.
 Fixed: with a divider style other than Solid, the plain LCD window edge (visible with custom colors or the silver case) is no longer drawn under the style's own edge.
+New: Indicators style: grid, pills, active only or icons.

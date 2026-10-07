@@ -63,6 +63,9 @@ enum { DIGITS_SEGMENT = 0, DIGITS_OXANIUM = 1, DIGITS_CHAKRA = 2, DIGITS_ORBITRO
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
+// Indicator styles: the framed 2x2 grid, a pill per indicator, only the active ones, or icons.
+enum { IND_GRID = 0, IND_PILLS = 1, IND_ACTIVE = 2, IND_ICONS = 3, IND_COUNT };
+
 // Date padding: zeros, a blank for the first number only, or blanks for both numbers.
 enum { PAD_ZERO = 0, PAD_FIRST_BLANK = 1, PAD_BOTH_BLANK = 2 };
 
@@ -107,6 +110,7 @@ typedef struct {
   uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
   uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
   uint8_t pm_in_box;           // 1: 12-hour time has a leading zero and PM moves into the indicator box
+  uint8_t indicator_style;     // IND_GRID, IND_PILLS, IND_ACTIVE or IND_ICONS
 } Settings;
 
 typedef struct {
@@ -163,9 +167,8 @@ static uint32_t color_key(int i) {
   return keys[i];
 }
 
-// The four indicator-box labels, in the order draw_indicator_labels() lists them. (SIG, the
-// hourly chime's indicator, made way for DST; COL_SIG stays so saved colours keep their places.)
-static const uint8_t INDICATOR_COLORS[] = { COL_BT, COL_CHG, COL_DST, COL_MUTE };
+// (SIG, the hourly chime's indicator, made way for DST; COL_SIG stays so saved colours keep their
+// places.)
 
 static Window *s_window;
 static Layer *s_canvas;
@@ -783,7 +786,7 @@ static void draw_bezel_text(GContext *ctx, const char *text, int x, int y, int w
 //  - optionally horizontally, each letter to its own width `letter_w[i]`
 //    (NULL = keep the width), with 2px letter gaps and stems kept at 2px;
 //  - drawn with the ordered dither at `density` (out of DENSITY_FULL).
-// The result is centred in `cell`; only the cell's interior is touched.
+// The result is centred in `cell` (or right-aligned); only the cell's interior is touched.
 #define FIT_MAX_W 40  // the widest indicator cell is 39 px,
 #define FIT_MAX_H 12  // and every cell is 12 rows tall
 #define FIT_MAX_LETTERS 8
@@ -829,7 +832,7 @@ static int row_to_drop(const FitRows buf, const int *rows, int n, int x0, int x1
 }
 
 static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, const int8_t *letter_w,
-                             int letter_w_n, int height, GColor color, int density) {
+                             int letter_w_n, int height, GColor color, int density, bool right) {
   if (color.argb == s_lcd.argb) return;  // invisible, and the ink could not be told from the LCD
   // Gothic 18 bold capitals start 7px below the text box's top.
   GRect box = GRect(cell.origin.x - 1, cell.origin.y - 7, cell.size.w + 2, 22);
@@ -916,7 +919,7 @@ static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, const 
     letter++;
   }
 
-  int ox = (x0 + x1 + 1) / 2 - kept / 2, oy = y0 + (cell.size.h - rows_out) / 2;
+  int ox = right ? x1 + 1 - kept : (x0 + x1 + 1) / 2 - kept / 2, oy = y0 + (cell.size.h - rows_out) / 2;
   for (int y = 0; y < rows_out; y++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, oy + y);
     for (int i = 0; i < kept; i++) {
@@ -1346,7 +1349,7 @@ static void draw_lcd(void) {
     draw_day(day_x, WEEKDAY_Y, DAYS[s_now.tm_wday], s_settings.date_range, s_col[COL_WEEKDAY]);
   }
   if (s_settings.date_range) draw_month_day();
-  draw_indicator_frame();
+  if (s_settings.indicator_style == IND_GRID) draw_indicator_frame();
   draw_time();
   draw_rules();
   if (s_settings.date_range) draw_temperature_range();
@@ -1437,6 +1440,129 @@ static void draw_bottom_bezel(GContext *ctx) {
                   s_col[COL_LABEL]);
 }
 
+// One indicator: its label, whether it is on, its colour when on, and its cell in the grid
+// (with the widths of its letters when they are stretched there).
+typedef struct {
+  const char *label;
+  bool on;
+  GColor ink;
+  GRect cell;
+  const int8_t *letter_w;
+  int letter_w_n;
+} Indicator;
+
+// The area the indicator styles share (the grid's box).
+#define IND_X0 107
+#define IND_Y0 34
+
+// An indicator's label in `cell`: lit, or faint dots when off. The system font fitted to the
+// cell, or the digit style's font.
+static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, bool right) {
+  const GColor color = ind->on ? ind->ink : s_ghost;
+  const int density = ind->on ? DENSITY_FULL : s_label_off_density;
+  if (!font_active()) {
+    draw_fitted_text(ctx, ind->label, cell, ind->letter_w, ind->letter_w_n, LABEL_H, color, density, right);
+    return;
+  }
+  if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+  font_draw_text(FG_LABEL, ind->label, cell.origin.x, cell.size.w,
+                 cell.origin.y + (cell.size.h + font_height(FG_LABEL)) / 2, right ? ALIGN_RIGHT : ALIGN_CENTER,
+                 color, density);
+  graphics_release_frame_buffer(ctx, s_fb);
+  s_fb = NULL;
+}
+
+// Whether (px, py) is inside the rounded rectangle x, y, w, h with corner radius r.
+static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
+  if (px < x || py < y || px >= x + w || py >= y + h) return false;
+  const int cx = px < x + r ? x + r : px >= x + w - r ? x + w - r : px;
+  const int cy = py < y + r ? y + r : py >= y + h - r ? y + h - r : py;
+  if (cx == px || cy == py) return true;
+  const int dx = 2 * px + 1 - 2 * cx, dy = 2 * py + 1 - 2 * cy;  // from the corner's centre, in half pixels
+  return dx * dx + dy * dy <= 4 * r * r;
+}
+
+// Pills: each indicator in its own rounded outline; an active one is filled with its colour and
+// its label cut out of it, an inactive one is a faint dotted outline with a faint label.
+#define PILL_W 41
+#define PILL_H 13
+#define PILL_R 5
+static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
+  // Grid order, as in the box: CHG and MUTE on the left, BT and DST on the right.
+  static const uint8_t SLOT[4][2] = { { 44, 0 }, { 1, 0 }, { 44, 15 }, { 1, 15 } };  // BT, CHG, DST, MUTE
+  for (int i = 0; i < 4; i++) {
+    if (!ind[i].on && !s_settings.ghosts) continue;
+    const int x = IND_X0 + SLOT[i][0], y = IND_Y0 + SLOT[i][1];
+    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + 2, PILL_W - 4, LABEL_H), false);
+    if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+    for (int yy = y; yy < y + PILL_H; yy++) {
+      GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
+      for (int xx = x; xx < x + PILL_W; xx++) {
+        if (!in_round_rect(xx, yy, x, y, PILL_W, PILL_H, PILL_R)) continue;
+        if (ind[i].on) {  // fill, with the label cut out of it
+          row.data[xx] = row.data[xx] == ind[i].ink.argb ? s_lcd.argb : ind[i].ink.argb;
+        } else if (!in_round_rect(xx, yy, x + 1, y + 1, PILL_W - 2, PILL_H - 2, PILL_R - 1) &&
+                   BAYER4[yy & 3][xx & 3] < s_label_off_density) {  // the outline, in dots
+          row.data[xx] = s_ghost.argb;
+        }
+      }
+    }
+    graphics_release_frame_buffer(ctx, s_fb);
+    s_fb = NULL;
+  }
+}
+
+// Active only: the labels of the indicators that are on, right-aligned, two to a column (the
+// right column first). Nothing is shown for the others.
+static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
+  int n = 0;
+  for (int i = 0; i < 4; i++) {
+    if (!ind[i].on) continue;
+    const int right = n < 2 ? BOX_RIGHT + 1 : BOX_DIV - 2;  // right edge of the column
+    draw_indicator_label(ctx, &ind[i], GRect(right - 42, IND_Y0 + 1 + (n % 2) * 15, 42, 12), true);
+    n++;
+  }
+}
+
+// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM), Quiet Time (the moon)
+// and daylight saving time (the sun). Faint dots when off.
+static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density) {
+  for (int r = 0; r < 2 * n; r++) {
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y + r);
+    const char *bits = rows[r / 2];
+    for (int k = 0; bits[k / 2]; k++) {
+      const int xx = x + k;
+      if (bits[k / 2] != '#' || xx < row.min_x || xx > row.max_x) continue;
+      if (density >= DENSITY_FULL || BAYER4[(y + r) & 3][xx & 3] < density) row.data[xx] = c.argb;
+    }
+  }
+}
+
+static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_cell) {
+  static const char *const BT[] = { "..#..", "..##.", "#.#.#", ".###.", "..#..", ".###.", "#.#.#", "..##.", "..#.." };
+  static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
+  static const char *const MOON[] = { "..###", ".##..", "##...", "##...", "##...", "##...", ".##..", "..###" };
+  static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
+                                     "..#####..", "...###...", ".#.....#.", "....#...." };
+  struct { const char *const *rows; int n; int x; int ind; } icon[] = {
+    { BT, ARRAY_LENGTH(BT), IND_X0 + 3, 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 23, 1 },
+    { MOON, ARRAY_LENGTH(MOON), IND_X0 + 44, 3 }, { SUN, ARRAY_LENGTH(SUN), IND_X0 + 63, 2 },
+  };
+  if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+  for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
+    const Indicator *it = &ind[icon[k].ind];
+    if (k == 1 && pm_cell) continue;  // PM is a label, drawn below
+    if (!it->on && !s_settings.ghosts) continue;
+    draw_icon_2x(icon[k].x, IND_Y0 + 5 + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
+                 it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
+  }
+  graphics_release_frame_buffer(ctx, s_fb);
+  s_fb = NULL;
+  if (pm_cell && (ind[1].on || s_settings.ghosts)) {
+    draw_indicator_label(ctx, &ind[1], GRect(IND_X0 + 18, IND_Y0 + 9, 24, LABEL_H), false);
+  }
+}
+
 // The indicator box's labels: lit (ink) when active, faint otherwise. DST is lit while daylight
 // saving time is in effect in the watch's time zone (the phone provides the zone; the watch's
 // own clock knows when DST applies). Each is fitted to LABEL_H rows and centred vertically in
@@ -1450,35 +1576,28 @@ static void draw_indicator_labels(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   const bool pm_cell = !is_24h() && s_settings.pm_in_box;
-  struct { const char *label; bool on; GRect cell; const int8_t *letter_w; int letter_w_n; } ind[] = {
-    { "BT",   s_connected,
+  // In the order BT, CHG (or PM), DST, MUTE; `cell` is the grid's.
+  Indicator ind[] = {
+    { "BT",   s_connected, s_col[COL_BT],
       GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
-    // With the leading zero in 12-hour time, PM takes CHG's cell (the battery icon shows charging).
+    // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
     { pm_cell ? "PM" : full ? "FULL" : "CHG", pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full,
+      pm_cell ? s_col[COL_PM] : s_col[COL_CHG],
       GRect(BOX_LEFT + 2, BOX_TOP + 2, left_w - 3, top_h), NULL, 0 },
-    { "DST",  s_now.tm_isdst > 0,
+    { "DST",  s_now.tm_isdst > 0, s_col[COL_DST],
       GRect(BOX_DIV + 1, BOX_MID + 1, right_w - 2, bottom_h), NULL, 0 },
-    { "MUTE", s_quiet,
+    { "MUTE", s_quiet, s_col[COL_MUTE],
       GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
   };
-  // With a font, the labels are its glyphs, centred in their cells (drawn into the framebuffer).
-  if (font_active() && !(s_fb = graphics_capture_frame_buffer(ctx))) return;
-  for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
-    if (!ind[i].on && !s_settings.ghosts) continue;
-    const GColor color = !ind[i].on ? s_ghost : (i == 1 && pm_cell) ? s_col[COL_PM] : s_col[INDICATOR_COLORS[i]];
-    const int density = ind[i].on ? DENSITY_FULL : s_label_off_density;
-    if (font_active()) {
-      const GRect c = ind[i].cell;
-      font_draw_text(FG_LABEL, ind[i].label, c.origin.x, c.size.w,
-                     c.origin.y + (c.size.h + font_height(FG_LABEL)) / 2, ALIGN_CENTER, color, density);
-    } else {
-      draw_fitted_text(ctx, ind[i].label, ind[i].cell, ind[i].letter_w, ind[i].letter_w_n, LABEL_H,
-                       color, density);
-    }
-  }
-  if (font_active()) {
-    graphics_release_frame_buffer(ctx, s_fb);
-    s_fb = NULL;
+  switch (s_settings.indicator_style) {
+    case IND_PILLS:  draw_indicator_pills(ctx, ind); break;
+    case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
+    case IND_ICONS:  draw_indicator_icons(ctx, ind, pm_cell); break;
+    default:  // the grid
+      for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
+        if (!ind[i].on && !s_settings.ghosts) continue;
+        draw_indicator_label(ctx, &ind[i], ind[i].cell, false);
+      }
   }
 }
 
@@ -1770,6 +1889,12 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_IndicatorStyle))) {
+    const char *v = t->value->cstring;
+    s_settings.indicator_style = strcmp(v, "pills") == 0 ? IND_PILLS : strcmp(v, "active") == 0 ? IND_ACTIVE
+        : strcmp(v, "icons") == 0 ? IND_ICONS : IND_GRID;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_TimeZero12))) {
     s_settings.pm_in_box = tuple_int(t) ? 1 : 0;
     settings_changed = true;
@@ -1963,6 +2088,7 @@ static void init(void) {
   if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;
   if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
   if (s_settings.pm_in_box > 1) s_settings.pm_in_box = 0;
+  if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_GRID;
   load_digit_font();
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
