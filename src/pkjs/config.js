@@ -55,11 +55,19 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "DateFormat", "label": "Date format", "defaultValue": "DM",
-        "description": "Min / max shows today's low (▼) and high (▲) temperature, for where your phone is, in place of the date, and the day of the month moves up next to the weekday (MON 05).",
+        "description": "Min / max shows today's low and high temperature, for where your phone is, in place of the date, and the day of the month moves up next to the weekday (MON 05).",
         "options": [
           { "label": "DD-MM", "value": "DM" },
           { "label": "MM-DD", "value": "MD" },
           { "label": "Min / max temperature (MON 05)", "value": "minmax" }
+        ]
+      },
+      {
+        "type": "select", "messageKey": "RangeMarks", "label": "Min / max marks", "defaultValue": "tall",
+        "options": [
+          { "label": "Tall arrows", "value": "tall" },
+          { "label": "Triangles", "value": "triangles" },
+          { "label": "LO / HI", "value": "lohi" }
         ]
       }
     ]

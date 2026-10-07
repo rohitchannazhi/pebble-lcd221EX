@@ -29,12 +29,13 @@ module.exports = function () {
     // unit while a temperature is shown: in the right box (which includes the idle time of
     // "after a shake") or the high and low in the date box (the "Min / max" date format).
     var rightBox = item('RightBox'), secondsMode = item('SecondsMode'), unit = item('TempUnit');
-    var duration = item('SecondsDuration'), dateFormat = item('DateFormat');
+    var duration = item('SecondsDuration'), dateFormat = item('DateFormat'), marks = item('RangeMarks');
     function syncRightBox() {
       var seconds = rightBox.get() === 'seconds', minmax = dateFormat.get() === 'minmax';
       if (seconds) secondsMode.show(); else secondsMode.hide();
       if (seconds && secondsMode.get() === 'shake') duration.show(); else duration.hide();
       if (!seconds || secondsMode.get() === 'shake' || minmax) unit.show(); else unit.hide();
+      if (minmax) marks.show(); else marks.hide();
     }
     rightBox.on('change', syncRightBox);
     secondsMode.on('change', syncRightBox);

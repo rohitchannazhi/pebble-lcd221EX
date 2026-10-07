@@ -63,6 +63,9 @@ enum { DIGITS_SEGMENT = 0, DIGITS_OXANIUM = 1, DIGITS_CHAKRA = 2, DIGITS_ORBITRO
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
+// What marks today's low and high: tall arrows, triangles, or LO / HI.
+enum { MARKS_TALL = 0, MARKS_TRIANGLES = 1, MARKS_LOHI = 2, MARKS_COUNT };
+
 // Indicator styles: the framed 2x2 grid, a pill per indicator, only the active ones, or icons.
 enum { IND_GRID = 0, IND_PILLS = 1, IND_ACTIVE = 2, IND_ICONS = 3, IND_COUNT };
 
@@ -109,6 +112,7 @@ typedef struct {
   uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
   uint8_t pm_in_box;           // 1: 12-hour time has a leading zero and PM moves into the indicator box
   uint8_t indicator_style;     // IND_GRID, IND_PILLS, IND_ACTIVE or IND_ICONS
+  uint8_t range_marks;         // MARKS_TALL, MARKS_TRIANGLES or MARKS_LOHI: what marks the low and the high
 } Settings;
 
 typedef struct {
@@ -1145,43 +1149,102 @@ static void draw_temperature(void) {
   draw_dots(TEMP_DEG_X + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// The date box's alternative to the date: today's low and high side by side, bottom-aligned
-// with the right box's digits, with a short divider between them. Each is a down or up arrow
-// (with a minus above it for a temperature below zero), a narrow slot for the "1" of 100+ and
-// two digits; no degree mark (the right box's temperature has one, and the space goes to bigger
-// digits).
+// The date box's alternative to the date: today's low and high side by side, centred in the
+// bottom row, with a short divider between them. Each is a mark (a tall arrow, a triangle, or
+// LO / HI: range_marks), a narrow slot for the "1" of 100+ and two digits; no degree mark (the
+// right box's temperature has one, and the space goes to bigger digits). Below zero, the minus
+// goes before the number (above the triangle with triangles).
 #define RANGE_DIGIT_W 15
 #define RANGE_DIGIT_H 30
 #define RANGE_LOW_X 2     // left edge of the low's arrow
 #define RANGE_HIGH_X 66   // and of the high's
 #define RANGE_DIV_X 61    // the divider between them
-static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
+// A filled vertical arrow, its tip up or down, centred on cx: `total` rows, of which `head` are the
+// head (widening to `head_w`) and the rest a `shaft` px wide shaft.
+static void draw_arrow(int cx, int top, bool up, int total, int head, int head_w, int shaft, GColor ink) {
+  for (int i = 0; i < total; i++) {
+    const int y = up ? top + i : top + total - 1 - i;  // i = 0 at the tip
+    const int half = i < head ? (head_w - 1) * i / (2 * (head - 1)) : -1;
+    if (half >= 0) fill(cx - half, y, 2 * half + 1, 1, ink, false);
+    else fill(cx - (shaft - 1) / 2, y, shaft, 1, ink, false);
+  }
+}
+
+// LO / HI in solid 3x5 dot-matrix letters (2x2 px dots), for the 7-segment style.
+static void draw_small_letters(int x, int y, const char *text, GColor ink) {
+  static const char *const L[] = { "#..", "#..", "#..", "#..", "###" };
+  static const char *const O[] = { "###", "#.#", "#.#", "#.#", "###" };
+  static const char *const H[] = { "#.#", "#.#", "###", "#.#", "#.#" };
+  static const char *const I[] = { "###", ".#.", ".#.", ".#.", "###" };
+  for (int k = 0; text[k]; k++) {
+    const char *const *g = text[k] == 'L' ? L : text[k] == 'O' ? O : text[k] == 'H' ? H : I;
+    for (int r = 0; r < 5; r++) {
+      for (int c = 0; c < 3; c++) {
+        if (g[r][c] == '#') fill(x + 8 * k + 2 * c, y + 2 * r, 2, 2, ink, false);
+      }
+    }
+  }
+}
+
+static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) {
   const int h = font_active() ? font_height(FG_RANGE) : RANGE_DIGIT_H, w = RANGE_DIGIT_W;
-  const int y = row3_base(h) - h;
+  const int y = row3_base(h) - h, cy = y + h / 2;  // the digits' top and middle
   const int d1 = x + 20, d2 = x + 37;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  // The arrow sits level with the middle of the digits, shifted with their slant, and a
-  // below-zero minus (as thick as a digit's bar) above it.
-  const int ay = y + (h - 6) / 2, ax = x + (h / 2) * s_slant / 1000;
-  draw_dots(ax, ay, arrow, 11, 6, 1, 1, true, ink);
-  if (neg) fill(ax + 1 + 10 * s_slant / 1000, ay - 10, 9, 3, ink, false);
-  if (font_active()) {  // right-aligned after the arrow (100 and up runs a little further left)
+  // The marks sit level with the middle of the digits, shifted with their slant.
+  const int sx = (h / 2) * s_slant / 1000;
+  bool minus_before = true;  // the minus goes before the number, except above the triangles
+  switch (s_settings.range_marks) {
+    case MARKS_TRIANGLES: {  // a 15x8 triangle, with a below-zero minus above it
+      const int ay = cy - 4;
+      draw_arrow(x + 7 + sx, ay, high, 8, 8, 15, 0, ink);
+      if (neg) fill(x + 2 + 12 * s_slant / 1000, ay - 9, 11, 3, ink, false);
+      minus_before = false;
+      break;
+    }
+    case MARKS_LOHI:
+      if (font_active()) {
+        font_draw_text(FG_LABEL, high ? "HI" : "LO", x, 0, cy + font_height(FG_LABEL) / 2, ALIGN_LEFT, ink,
+                       DENSITY_FULL);
+      } else {
+        draw_small_letters(x + sx, cy - 5, high ? "HI" : "LO", ink);
+      }
+      break;
+    default:  // a tall arrow: 26 px, a 7 px head 11 px wide and a 2 px shaft
+      draw_arrow(x + 5 + sx, cy - 13, high, 26, 7, 11, 2, ink);
+  }
+  if (font_active()) {
+    // Right-aligned after the mark, with a below-zero minus as a short bar just before the digits
+    // (the fonts' own minus is wide). A long number (below -9, or 100 and up) may use up to 5 px
+    // more on the right rather than run into the mark.
     char text[6];
     if (valid) snprintf(text, sizeof(text), "%d", v);
     else snprintf(text, sizeof(text), "--");
-    font_draw_text(FG_RANGE, text, x + 12, 40, y + h, ALIGN_RIGHT, ink, DENSITY_FULL);
+    const bool bar = neg && minus_before;
+    const int mark_end = s_settings.range_marks == MARKS_LOHI ? x + font_text_width(FG_LABEL, "LO") + 2 : x + 12;
+    int right = x + 52;
+    const int start = right - font_text_width(FG_RANGE, text) - (bar ? 7 : 0);
+    if (start < mark_end) right += mark_end - start < 5 ? mark_end - start : 5;
+    font_draw_text(FG_RANGE, text, right - 40, 40, y + h, ALIGN_RIGHT, ink, DENSITY_FULL);
+    if (bar) fill(right - font_text_width(FG_RANGE, text) - 6, cy - 1, 5, 3, ink, false);
     return;
   }
-  // The "1" of 100+: the right verticals of a digit placed so they land between the arrow and
+  // The "1" of 100+: the right verticals of a digit placed so they land between the mark and
   // the first digit. No unlit ghost at this size: it would crowd the digits.
   if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
-  } else {
-    draw_digit(d1, y, w, h, (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
-    draw_digit(d2, y, w, h, v % 10, ink);
+    return;
+  }
+  // Below zero, before the number: in the empty tens place, or as a short bar before it.
+  const bool minus_digit = neg && minus_before && v < 10;
+  draw_digit(d1, y, w, h, minus_digit ? DIGIT_MINUS : (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
+  draw_digit(d2, y, w, h, v % 10, ink);
+  if (neg && minus_before && v >= 10) {  // (clear of LO / HI, which is wider than an arrow)
+    if (s_settings.range_marks == MARKS_LOHI) fill(x + 15 + sx, cy - 1, 4, 3, ink, false);
+    else fill(x + 13 + sx, cy - 1, 6, 3, ink, false);
   }
 }
 
@@ -1210,23 +1273,9 @@ static void draw_range_divider(int x, int top, int bottom) {
 }
 
 static void draw_temperature_range(void) {
-  static const char UP[] =
-    ".....#....."
-    "....###...."
-    "...#####..."
-    "..#######.."
-    ".#########."
-    "###########";
-  static const char DOWN[] =
-    "###########"
-    ".#########."
-    "..#######.."
-    "...#####..."
-    "....###...."
-    ".....#.....";
   const bool valid = range_valid();
-  draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
-  draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
+  draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, false, s_col[COL_DATE]);
+  draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, true, s_col[COL_DATE]);
   const int base = row3_base(RANGE_DIGIT_H);
   draw_range_divider(RANGE_DIV_X, base - RANGE_DIGIT_H - 2, base + 1);
 }
@@ -1897,6 +1946,12 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_RangeMarks))) {
+    const char *v = t->value->cstring;
+    s_settings.range_marks = strcmp(v, "triangles") == 0 ? MARKS_TRIANGLES : strcmp(v, "lohi") == 0 ? MARKS_LOHI
+        : MARKS_TALL;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_IndicatorStyle))) {
     const char *v = t->value->cstring;
     s_settings.indicator_style = strcmp(v, "pills") == 0 ? IND_PILLS : strcmp(v, "active") == 0 ? IND_ACTIVE
@@ -2091,6 +2146,7 @@ static void init(void) {
   if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
   if (s_settings.pm_in_box > 1) s_settings.pm_in_box = 0;
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_GRID;
+  if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   load_digit_font();
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {

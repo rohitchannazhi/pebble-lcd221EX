@@ -35,10 +35,10 @@ GROUPS = [
     # (Also the day of the month beside it, at the same size: "MON 05" must fit before the indicators.)
     ("weekday", "ADEFHIMNORSTUW" + DIGITS, "M", 24, [(w, 64) for w in WEEKDAYS] + [("WED30", 92)]),
     ("date", DIGITS + "-", "8", 26, [("00", 30), ("00-00", 110)]),
-    ("range", DIGITS, "8", 30, [("88", 34)]),  # (100 and up runs further left)
+    ("range", DIGITS + "-", "8", 30, [("88", 34)]),  # (100 and up, or below zero, runs further left)
     # (Below zero or from 100 up, the watch leaves out the degree mark to keep this size.)
     ("right", DIGITS + "-°", "8", 36, [("88°", 66), ("-88", 66), ("188", 66)]),
-    ("label", "BCDEFGHLMPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
+    ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 FONTS = {  # output name -> variable-font weight (None: a static font)
     "oxanium": 700, "chakrapetch": None, "orbitron": 700,

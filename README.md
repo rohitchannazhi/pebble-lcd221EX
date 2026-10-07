@@ -20,7 +20,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 | Weekday | Dot-matrix day name (SUN, MON, ...). While the date box shows the high and low, the letters are narrower and the day of the month follows them (`MON05`) |
 | Indicator box | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on. Active labels are black (white when inverted); inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |
-| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each after a ▼ / ▲ arrow with a divider between them (settings). |
+| Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each after a mark (tall arrows, triangles or LO / HI) with a divider between them (settings). |
 | Right box | Temperature (°C or °F) or seconds |
 | Bottom bezel | A **WR** badge (or a heart and your latest heart rate) and a text label |
 
@@ -43,7 +43,8 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
 | | Leading zero in the hour | On (07:05), Off (`7:05`, like the original). 24-hour format only; not shown while 12-hour is selected |
 | | Leading zero in 12-hour time | Off. On shows 07:05 instead of 7:05; the P beside the hours makes way, and **PM** is shown in the indicator box in place of CHG / FULL (the battery icon shows a bolt while charging). Not shown while 24-hour is selected |
-| | Date format | DD-MM, MM-DD, Min / max temperature (today's low then high, side by side after ▼ / ▲ arrows, for the day where your phone is, in place of the date; `--` until the first weather reading of the day. The day of the month moves up next to the weekday: `MON05`) |
+| | Date format | DD-MM, MM-DD, Min / max temperature (today's low then high, side by side, each after a mark (see below), for the day where your phone is, in place of the date; `--` until the first weather reading of the day. The day of the month moves up next to the weekday: `MON05`) |
+| | Min / max marks | **Tall arrows** (↓ beside the low, ↑ beside the high), Triangles, LO / HI. Below zero the minus goes before the number (above the triangle with Triangles). Only shown with the min / max date format |
 | Right box | Right box shows | Temperature, Seconds (redraws every second: uses more battery) |
 | | Temperature unit | **Follow watch** (Fahrenheit when the watch uses imperial units, otherwise Celsius), Celsius, Fahrenheit (shown while the temperature can be on screen) |
 | | Seconds ticking | **Always** (every second, the default), or after a wrist shake. Shown only while the right box shows seconds; the right box shows the temperature the rest of the time |
