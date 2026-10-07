@@ -13,3 +13,4 @@ Fixed: with a divider style other than Solid, the plain LCD window edge (visible
 New: Indicators style: grid, pills, active only or icons.
 Changed: the heart rate shows a heart instead of HR; with corner brackets the LCD's corners are bolder, and the ruler-ticks edge is thicker.
 Fixed: with a font, the day of the month matches the weekday's size and both are centred on the indicators; the temperature is centred in its box.
+Changed: single-digit days and months always have a leading zero (05, 06-05); the Single-digit dates setting is gone.

@@ -66,8 +66,6 @@ enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3
 // Indicator styles: the framed 2x2 grid, a pill per indicator, only the active ones, or icons.
 enum { IND_GRID = 0, IND_PILLS = 1, IND_ACTIVE = 2, IND_ICONS = 3, IND_COUNT };
 
-// Date padding: zeros, a blank for the first number only, or blanks for both numbers.
-enum { PAD_ZERO = 0, PAD_FIRST_BLANK = 1, PAD_BOTH_BLANK = 2 };
 
 // Everything the settings page controls, grouped and ordered like the page itself
 // (config.js). Saved with persist_write_data: bump SETTINGS_KEY when it changes.
@@ -103,7 +101,7 @@ typedef struct {
   uint8_t seconds_on_shake;    // 1: seconds tick only for a while after a wrist shake
   uint8_t seconds_burst_s;     // how many seconds they tick for
   uint8_t hour_no_zero;        // 1: 24-hour time has no leading zero (7:05, like the original)
-  uint8_t date_pad;            // single-digit date numbers: PAD_ZERO (06-05), PAD_FIRST_BLANK ( 6-05), PAD_BOTH_BLANK ( 6- 5)
+  uint8_t unused3;             // was the single-digit date setting; dates always have leading zeros now
   uint8_t date_range;          // 1: the date box shows today's high and low; the day of the month moves up next to the weekday
   uint8_t case_pattern;        // black case only: CASE_SOLID, or dark gray dots over it (CASE_DOTS, CASE_CHECKER)
   // Added at the end: settings saved before are shorter, and these keep their defaults (0).
@@ -1051,20 +1049,17 @@ static void draw_date(void) {
   int second = s_settings.day_first ? s_now.tm_mon + 1 : s_now.tm_mday;
   const int w = 15, h = 26;
   const int y = row3_base(h) - h;  // bottom aligned with the right box's digits
-  const bool blank_first = s_settings.date_pad != PAD_ZERO;
-  const bool blank_second = s_settings.date_pad == PAD_BOTH_BLANK;
-  if (font_active()) {
+  if (font_active()) {  // with leading zeros, like everything else
     char text[8];
-    snprintf(text, sizeof(text), "%c%d-%c%d", (first >= 10 || !blank_first) ? '0' + first / 10 : ' ',
-             first % 10, (second >= 10 || !blank_second) ? '0' + second / 10 : ' ', second % 10);
+    snprintf(text, sizeof(text), "%02d-%02d", first, second);
     font_draw_text(FG_DATE, text, 0, ROW3_DIV_X, row3_base(font_height(FG_DATE)), ALIGN_CENTER, ink,
                    DENSITY_FULL);
     return;
   }
-  draw_digit(27, y, w, h, (first >= 10 || !blank_first) ? first / 10 : DIGIT_BLANK, ink);
+  draw_digit(27, y, w, h, first / 10, ink);
   draw_digit(46, y, w, h, first % 10, ink);
   draw_segments(64, y, 8, h, SEG_G, SEG_G, ink);  // dash: the font's middle bar
-  draw_digit(75, y, w, h, (second >= 10 || !blank_second) ? second / 10 : DIGIT_BLANK, ink);
+  draw_digit(75, y, w, h, second / 10, ink);
   draw_digit(94, y, w, h, second % 10, ink);
 }
 
@@ -1077,14 +1072,13 @@ static int font_weekday_base(void) {
 // in 7-segment digits as tall as the weekday letters, so the row reads e.g. "MON 05".
 static void draw_month_day(void) {
   const int d = s_now.tm_mday, w = 11, h = BOX_BOTTOM - BOX_TOP;
-  const bool blank = d < 10 && s_settings.date_pad != PAD_ZERO;
   if (font_active()) {  // in the weekday's font and size, after it (see draw_lcd)
-    char text[3] = { blank ? ' ' : '0' + d / 10, '0' + d % 10, 0 };
+    char text[3] = { '0' + d / 10, '0' + d % 10, 0 };
     font_draw_text(FG_WEEKDAY, text, font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + WEEKDAY_NARROW_X + 4,
                    0, font_weekday_base(), ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
     return;
   }
-  draw_digit(75, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
+  draw_digit(75, WEEKDAY_Y, w, h, d / 10, s_col[COL_WEEKDAY]);  // with a leading zero (05)
   draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
 
@@ -1917,11 +1911,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.hour_no_zero = tuple_int(t) ? 0 : 1;
     settings_changed = true;
   }
-  if ((t = dict_find(iter, MESSAGE_KEY_DatePadding))) {
-    const char *p = t->value->cstring;
-    s_settings.date_pad = strcmp(p, "first") == 0 ? PAD_FIRST_BLANK : strcmp(p, "both") == 0 ? PAD_BOTH_BLANK : PAD_ZERO;
-    settings_changed = true;
-  }
   // Right box
   if ((t = dict_find(iter, MESSAGE_KEY_RightBox))) {
     s_settings.show_seconds = strcmp(t->value->cstring, "seconds") == 0;
@@ -2096,7 +2085,6 @@ static void init(void) {
   // Old saves left padding where these two now live.
   if (s_settings.seconds_on_shake > 1) s_settings.seconds_on_shake = 0;
   if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
-  if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
   if (s_settings.date_range > 1) s_settings.date_range = 0;
   if (s_settings.case_pattern > CASE_CHECKER) s_settings.case_pattern = CASE_SOLID;
   if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;

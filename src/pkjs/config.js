@@ -61,15 +61,6 @@ module.exports = [
           { "label": "MM-DD", "value": "MD" },
           { "label": "Min / max temperature (MON 05)", "value": "minmax" }
         ]
-      },
-      {
-        "type": "select", "messageKey": "DatePadding", "label": "Single-digit dates", "defaultValue": "zero",
-        "description": "How a month or day below 10 is shown. Blanks, like the original watch, look like 6- 5.",
-        "options": [
-          { "label": "Leading zeros (06-05)", "value": "zero" },
-          { "label": "Blank first number only ( 6-05)", "value": "first" },
-          { "label": "Blank both numbers ( 6- 5)", "value": "both" }
-        ]
       }
     ]
   },
