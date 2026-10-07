@@ -53,7 +53,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | | Left text | `30 DAY BATT` (up to 19 characters, capitals; only shown while the battery level is off) |
 | | Show step count | On. When off, the right text is shown instead |
 | | Right text | `WR 3ATM` (up to 19 characters, capitals; only shown while the step count is off) |
-| Bottom bezel | Show heart rate | Off. When on, the WR badge becomes HR with the latest heart rate |
+| Bottom bezel | Show heart rate | Off. When on, the WR badge is replaced by a heart and the latest heart rate |
 | | Label | `PEBBLE` (up to 12 characters, capitals; empty for none) |
 | Appearance | Case color | Applies with custom colors too. Black, Silver, Charcoal (dotted: dark gray dots on 25% of the black case's pixels), Charcoal (checkerboard: half the pixels dark gray). On the watch's screen the dots blend into a dark charcoal; with Inverted colors the charcoal case sets the black LCD apart |
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
