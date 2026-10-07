@@ -32,7 +32,8 @@ WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 # (down to MIN_SQUEEZE of its width), then made smaller.
 GROUPS = [
     ("time", DIGITS + ":", "8", 70, [(d, 41) for d in DIGITS]),
-    ("weekday", "ADEFHIMNORSTUW", "M", 24, [(w, 64) for w in WEEKDAYS]),
+    # (Also the day of the month beside it, at the same size: "MON 05" must fit before the indicators.)
+    ("weekday", "ADEFHIMNORSTUW" + DIGITS, "M", 24, [(w, 64) for w in WEEKDAYS] + [("WED30", 92)]),
     ("date", DIGITS + "-", "8", 26, [("00", 30), ("00-00", 110)]),
     ("range", DIGITS, "8", 30, [("88", 34)]),  # (100 and up runs further left)
     # (Below zero or from 100 up, the watch leaves out the degree mark to keep this size.)

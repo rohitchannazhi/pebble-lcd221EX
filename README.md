@@ -22,7 +22,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 | Time | Large 7-segment digits (slanted by default). A **P** lights up for PM in 12-hour mode |
 | Date box | DD-MM or MM-DD, or today's low and high temperature side by side, each after a ▼ / ▲ arrow with a divider between them (settings). |
 | Right box | Temperature (°C or °F) or seconds |
-| Bottom bezel | A **WR** badge (or **HR** and your latest heart rate) and a text label |
+| Bottom bezel | A **WR** badge (or a heart and your latest heart rate) and a text label |
 
 Notes:
 

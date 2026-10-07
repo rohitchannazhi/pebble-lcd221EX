@@ -1068,14 +1068,20 @@ static void draw_date(void) {
   draw_digit(94, y, w, h, second % 10, ink);
 }
 
+// The baseline of the weekday (and the day of the month) in a font: centred on the indicators' row.
+static int font_weekday_base(void) {
+  return (BOX_TOP + BOX_BOTTOM + font_height(FG_WEEKDAY)) / 2;
+}
+
 // With the date box showing the high and low: the day of the month after the (narrowed) weekday,
 // in 7-segment digits as tall as the weekday letters, so the row reads e.g. "MON 05".
 static void draw_month_day(void) {
   const int d = s_now.tm_mday, w = 11, h = BOX_BOTTOM - BOX_TOP;
   const bool blank = d < 10 && s_settings.date_pad != PAD_ZERO;
-  if (font_active()) {
+  if (font_active()) {  // in the weekday's font and size, after it (see draw_lcd)
     char text[3] = { blank ? ' ' : '0' + d / 10, '0' + d % 10, 0 };
-    font_draw_text(FG_DATE, text, 75, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
+    font_draw_text(FG_WEEKDAY, text, font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + WEEKDAY_NARROW_X + 4,
+                   0, font_weekday_base(), ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
     return;
   }
   draw_digit(75, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
@@ -1106,14 +1112,14 @@ static void draw_temperature(void) {
   bool valid = weather_valid();
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
   if (font_active()) {
-    // Right-aligned. Below zero or from 100 up there is no degree mark, so the font can stay
+    // Centred in the box. Below zero or from 100 up there is no degree mark, so the font can stay
     // as big as two digits and a degree mark allow (tools/gen_fonts.py).
     char text[8];
     if (!valid) snprintf(text, sizeof(text), "--%c", DEGREE_CHAR);
     else if (neg || hundred) snprintf(text, sizeof(text), "%d", temp);
     else snprintf(text, sizeof(text), "%d%c", temp, DEGREE_CHAR);
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 4, row3_base(font_height(FG_RIGHT)),
-                   ALIGN_RIGHT, ink, DENSITY_FULL);
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, row3_base(font_height(FG_RIGHT)),
+                   ALIGN_CENTER, ink, DENSITY_FULL);
     return;
   }
   // The minus is the font's middle bar in a narrow box; the "1" is the right
@@ -1246,14 +1252,16 @@ static bool seconds_showing(void) {
   return !s_settings.seconds_on_shake || burst_active();
 }
 
-// Viewfinder corners (8 px arms) of the box x0..x1, y0..y1: the ones in `corners`.
+// Viewfinder corners of the box x0..x1, y0..y1 (the ones in `corners`): arms `a` px long, `t` thick.
 enum { CORNER_TL = 1, CORNER_TR = 2, CORNER_BL = 4, CORNER_BR = 8 };
-static void draw_brackets(int x0, int x1, int y0, int y1, int corners, GColor c) {
-  const int a = 8;
-  if (corners & CORNER_TL) { fill(x0, y0, a, 1, c, false); fill(x0, y0, 1, a, c, false); }
-  if (corners & CORNER_TR) { fill(x1 - a + 1, y0, a, 1, c, false); fill(x1, y0, 1, a, c, false); }
-  if (corners & CORNER_BL) { fill(x0, y1, a, 1, c, false); fill(x0, y1 - a + 1, 1, a, c, false); }
-  if (corners & CORNER_BR) { fill(x1 - a + 1, y1, a, 1, c, false); fill(x1, y1 - a + 1, 1, a, c, false); }
+static void draw_brackets(int x0, int x1, int y0, int y1, int corners, int a, int t, GColor c) {
+  if (corners & CORNER_TL) { fill(x0, y0, a, t, c, false); fill(x0, y0, t, a, c, false); }
+  if (corners & CORNER_TR) { fill(x1 - a + 1, y0, a, t, c, false); fill(x1 - t + 1, y0, t, a, c, false); }
+  if (corners & CORNER_BL) { fill(x0, y1 - t + 1, a, t, c, false); fill(x0, y1 - a + 1, t, a, c, false); }
+  if (corners & CORNER_BR) {
+    fill(x1 - a + 1, y1 - t + 1, a, t, c, false);
+    fill(x1 - t + 1, y1 - a + 1, t, a, c, false);
+  }
 }
 
 // The lines between the time and the bottom row and between the date box and the right box, in
@@ -1274,8 +1282,8 @@ static void draw_rules(void) {
       break;
     case LINES_BRACKETS:  // no lines: the two boxes' corners beside the divider (the LCD's own
                           // corners, drawn with its edges, frame the outer side)
-      draw_brackets(2, xd - 3, y0 + 1, yb - 1, CORNER_TR | CORNER_BR, c);
-      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, CORNER_TL | CORNER_BL, c);
+      draw_brackets(2, xd - 3, y0 + 1, yb - 1, CORNER_TR | CORNER_BR, 8, 1, c);
+      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, CORNER_TL | CORNER_BL, 8, 1, c);
       break;
     case LINES_HUD: {  // the line splits into two 45-degree arms that meet the divider, with angled tips
       const int arm = 12;
@@ -1311,17 +1319,18 @@ static void draw_lcd_edges(void) {
         fill(x, bottom, w, 2, c, false);
       }
       break;
-    case LINES_RULER:  // hairlines, with ticks pointing into the LCD
-      fill(LCD_X, top + 1, LCD_W, 1, c, false);
-      fill(LCD_X, bottom, LCD_W, 1, c, false);
+    case LINES_RULER:  // 2 px lines, with ticks pointing into the LCD
+      fill(LCD_X, top, LCD_W, 2, c, false);
+      fill(LCD_X, bottom, LCD_W, 2, c, false);
       for (int x = 4; x < LCD_W; x += 8) {
-        const int len = x % 32 == 4 ? 3 : 1;
+        const int len = x % 32 == 4 ? 5 : 2;
         fill(x, top + 2, 1, len, c, false);
         fill(x, bottom - len, 1, len, c, false);
       }
       break;
-    case LINES_BRACKETS:  // only the LCD's four corners
-      draw_brackets(LCD_X, LCD_X + LCD_W - 1, top + 1, bottom, CORNER_TL | CORNER_TR | CORNER_BL | CORNER_BR, c);
+    case LINES_BRACKETS:  // only the LCD's four corners, bolder than the bottom row's
+      draw_brackets(LCD_X, LCD_X + LCD_W - 1, top, bottom + 1, CORNER_TL | CORNER_TR | CORNER_BL | CORNER_BR,
+                    14, 2, c);
       break;
     case LINES_HUD:  // lines with 45-degree tips bent into the LCD, like the main divider's ends
       fill(6, top, LCD_W - 12, 2, c, false);
@@ -1342,9 +1351,9 @@ static void draw_lcd_edges(void) {
 static void draw_lcd(void) {
   draw_lcd_edges();
   const int day_x = s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X;
-  if (font_active()) {  // on the weekday row's bottom line (2 px left: the letters have side bearings)
-    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x - 2, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY],
-                   DENSITY_FULL);
+  if (font_active()) {  // centred on the indicators' row (2 px left: the letters have side bearings)
+    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x - 2, 0, font_weekday_base(), ALIGN_LEFT,
+                   s_col[COL_WEEKDAY], DENSITY_FULL);
   } else {
     draw_day(day_x, WEEKDAY_Y, DAYS[s_now.tm_wday], s_settings.date_range, s_col[COL_WEEKDAY]);
   }
@@ -1426,15 +1435,20 @@ static void draw_top_bezel(GContext *ctx) {
 // Bottom bezel (larger text): the WR badge (or HR badge and heart rate) and the
 // custom label.
 static void draw_bottom_bezel(GContext *ctx) {
-  graphics_context_set_stroke_color(ctx, s_col[COL_BADGE]);
-  graphics_draw_round_rect(ctx, GRect(10, BOTTOM_CAP - 3, 30, 20), 3);
-  draw_bezel_text(ctx, s_settings.heart_rate ? "HR" : "WR", 10, BOTTOM_CAP, 30, GTextAlignmentCenter,
-                  s_col[COL_BADGE]);
-  if (s_settings.heart_rate) {
+  if (s_settings.heart_rate) {  // a heart and the latest heart rate
+    static const char *const HEART[] = {
+      "..###...###..", ".#####.#####.", "#############", "#############", "#############",
+      ".###########.", "..#########..", "...#######...", "....#####....", ".....###.....", "......#......",
+    };
+    draw_icon(ctx, 12, BOTTOM_CAP + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
     char hr_text[12];
     if (s_hr > 0) snprintf(hr_text, sizeof(hr_text), "%d", s_hr);
     else snprintf(hr_text, sizeof(hr_text), "--");
-    draw_bezel_text(ctx, hr_text, 44, BOTTOM_CAP, 36, GTextAlignmentLeft, s_col[COL_HEART]);
+    draw_bezel_text(ctx, hr_text, 30, BOTTOM_CAP, 50, GTextAlignmentLeft, s_col[COL_HEART]);
+  } else {  // the water resistance badge
+    graphics_context_set_stroke_color(ctx, s_col[COL_BADGE]);
+    graphics_draw_round_rect(ctx, GRect(10, BOTTOM_CAP - 3, 30, 20), 3);
+    draw_bezel_text(ctx, "WR", 10, BOTTOM_CAP, 30, GTextAlignmentCenter, s_col[COL_BADGE]);
   }
   draw_bezel_text(ctx, s_settings.bezel_label, 82, BOTTOM_CAP, 108, GTextAlignmentRight,
                   s_col[COL_LABEL]);
