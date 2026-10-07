@@ -16,8 +16,12 @@ module.exports = function () {
     });
 
     // The hour's leading zero only matters in the 24-hour format ("Follow watch" may be either).
-    var timeFormat = item('TimeFormat'), hourZero = item('TimeZero');
-    function syncHourZero() { if (timeFormat.get() === '12') hourZero.hide(); else hourZero.show(); }
+    // The 12-hour one only matters in 12-hour time.
+    var timeFormat = item('TimeFormat'), hourZero = item('TimeZero'), hourZero12 = item('TimeZero12');
+    function syncHourZero() {
+      if (timeFormat.get() === '12') hourZero.hide(); else hourZero.show();
+      if (timeFormat.get() === '24') hourZero12.hide(); else hourZero12.show();
+    }
     timeFormat.on('change', syncHourZero);
     syncHourZero();
 

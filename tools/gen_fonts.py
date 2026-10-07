@@ -37,7 +37,7 @@ GROUPS = [
     ("range", DIGITS, "8", 30, [("88", 34)]),  # (100 and up runs further left)
     # (Below zero or from 100 up, the watch leaves out the degree mark to keep this size.)
     ("right", DIGITS + "-°", "8", 36, [("88°", 66), ("-88", 66), ("188", 66)]),
-    ("label", "BCDEFGHLMSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
+    ("label", "BCDEFGHLMPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 FONTS = {  # output name -> variable-font weight (None: a static font)
     "oxanium": 700, "chakrapetch": None, "orbitron": 700,

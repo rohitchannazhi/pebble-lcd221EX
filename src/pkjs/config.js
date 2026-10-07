@@ -50,6 +50,10 @@ module.exports = [
         "description": "24-hour format only. Off shows 7:05 instead of 07:05, like the original watch."
       },
       {
+        "type": "toggle", "messageKey": "TimeZero12", "label": "Leading zero in 12-hour time", "defaultValue": false,
+        "description": "Shows 07:05 instead of 7:05. The P beside the hours makes way: PM is shown in the indicator box instead, in place of CHG (the battery icon shows a bolt while charging)."
+      },
+      {
         "type": "select", "messageKey": "DateFormat", "label": "Date format", "defaultValue": "DM",
         "description": "Min / max shows today's low (▼) and high (▲) temperature, for where your phone is, in place of the date, and the day of the month moves up next to the weekday (MON 05).",
         "options": [

@@ -42,6 +42,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 |---|---|---|
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
 | | Leading zero in the hour | On (07:05), Off (`7:05`, like the original). 24-hour format only; not shown while 12-hour is selected |
+| | Leading zero in 12-hour time | Off. On shows 07:05 instead of 7:05; the P beside the hours makes way, and **PM** is shown in the indicator box in place of CHG / FULL (the battery icon shows a bolt while charging). Not shown while 24-hour is selected |
 | | Date format | DD-MM, MM-DD, Min / max temperature (today's low then high, side by side after ▼ / ▲ arrows, for the day where your phone is, in place of the date; `--` until the first weather reading of the day. The day of the month moves up next to the weekday: `MON05`) |
 | | Single-digit dates | **Leading zeros** (`06-05`), blank first number only (` 6-05`), or blank both numbers (` 6- 5`, like the original). With min / max in the date box, the day next to the weekday follows this too (`MON 5` unless leading zeros) |
 | Right box | Right box shows | Temperature, Seconds (redraws every second: uses more battery) |
@@ -57,7 +58,7 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | Appearance | Case color | Applies with custom colors too. Black, Silver, Charcoal (dotted: dark gray dots on 25% of the black case's pixels), Charcoal (checkerboard: half the pixels dark gray). On the watch's screen the dots blend into a dark charcoal; with Inverted colors the charcoal case sets the black LCD apart |
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
 | | Digit style | **7-segment** (the LCD look, with unlit segments), Oxanium, Chakra Petch, Wide (based on Orbitron). A font is used for every text and number on the LCD (weekday, day, indicator labels, time, date, min / max, temperature and seconds), upright, without unlit segments; the top and bottom bars keep their own text. Below zero or from 100 up, the right box leaves out the degree mark |
-| | Divider lines | **Solid**, Segmented (dashes), Ruler ticks (a hairline with ticks), Corner brackets (corners around the two boxes instead of lines), HUD chamfer (the line splits into two 45° arms that meet the divider) |
+| | Divider lines | **Solid**, Segmented (dashes), Ruler ticks (a hairline with ticks), Corner brackets (corners around the two boxes instead of lines), HUD chamfer (the line splits into two 45° arms that meet the divider). The LCD window's top and bottom edges follow the same style. The bottom row is centred between the divider and the bottom of the LCD |
 | | Slanted digits | On, Off, 7-segment only (leans the digits like the original; straight digits have sharper edges) |
 | | Show unlit segments | On, Off |
 | | Backlight color | **System default** (your watch's normal colour), Amber, Warm white, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, **Custom color...** (shows the app's own color picker, the watch's 64 colors) |

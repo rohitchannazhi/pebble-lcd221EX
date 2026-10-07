@@ -106,6 +106,7 @@ typedef struct {
   // Added at the end: settings saved before are shorter, and these keep their defaults (0).
   uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
   uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
+  uint8_t pm_in_box;           // 1: 12-hour time has a leading zero and PM moves into the indicator box
 } Settings;
 
 typedef struct {
@@ -988,13 +989,15 @@ static void draw_time(void) {
     if (hour == 0) hour = 12;
   }
   const int ty = TIME_Y, tw = TIME_W, th = TIME_H;
-  if (!is24) draw_dots(PM_X, ty + PM_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);  // AM/PM only in 12-hour mode
+  // AM/PM only in 12-hour mode: the P beside the hours, or PM in the indicator box (pm_in_box).
+  const bool zero12 = !is24 && s_settings.pm_in_box;
+  if (!is24 && !zero12) draw_dots(PM_X, ty + PM_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
   // Digit boxes (left edges) and the colon, spread like the original's.
   static const int X[4] = { 6, 49, 108, 153 };
   const int colon_x = 93;
   // 12-hour: the first digit is blank or a 1 (the P sits where a 0 would be). 24-hour: the
   // leading zero is optional.
-  int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero)) ? hour / 10 : DIGIT_BLANK;
+  int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero) || zero12) ? hour / 10 : DIGIT_BLANK;
   if (font_active()) {
     // Each digit centred in its box, the group centred on the digits' height; the font's colon
     // is centred on the digits too (tools/gen_fonts.py).
@@ -1006,7 +1009,7 @@ static void draw_time(void) {
     font_draw_centered(FG_TIME, '0' + s_now.tm_min % 10, X[3] + tw / 2, base, s_col[COL_MINUTES]);
     return;
   }
-  if (is24) {
+  if (is24 || zero12) {
     draw_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS]);
   } else {
     // In 12-hour mode the first digit can only be a 1 (or blank), so it only has
@@ -1024,11 +1027,10 @@ static void draw_time(void) {
   draw_digit(X[3], ty, tw, th, s_now.tm_min % 10, s_col[COL_MINUTES]);
 }
 
-// The bottom line of something `h` px tall in the bottom row: the right box's digit baseline, or,
-// with corner brackets, centred between the brackets' top and bottom rows.
+// The bottom line of something `h` px tall in the bottom row, centred between the divider line
+// and the bottom of the LCD.
 static int row3_base(int h) {
-  if (s_settings.line_style != LINES_BRACKETS) return ROW3_Y + ROW3_H;
-  const int top = ROW3_LINE_Y + 1, bottom = LCD_Y + LCD_H - 2;
+  const int top = ROW3_LINE_Y + 2, bottom = LCD_Y + LCD_H - 1;
   return (top + bottom + 1) / 2 + h / 2;
 }
 
@@ -1290,8 +1292,54 @@ static void draw_rules(void) {
   }
 }
 
+// The LCD window's top and bottom edges (the 2px bands between it and the case) in the divider
+// line style, in the dividers' colour. Solid keeps the plain edge drawn in canvas_update.
+static void draw_lcd_edges(void) {
+  const GColor c = s_col[COL_RULES];
+  const int top = LCD_Y - 2, bottom = LCD_Y + LCD_H;  // each band is 2 rows
+  switch (s_settings.line_style) {
+    case LINES_SEGMENTED:
+      for (int x = 2; x < LCD_W - 2; x += 9) {
+        const int w = x + 6 > LCD_W - 2 ? LCD_W - 2 - x : 6;
+        fill(x, top, w, 2, c, false);
+        fill(x, bottom, w, 2, c, false);
+      }
+      break;
+    case LINES_RULER:  // hairlines, with ticks pointing into the LCD
+      fill(LCD_X, top + 1, LCD_W, 1, c, false);
+      fill(LCD_X, bottom, LCD_W, 1, c, false);
+      for (int x = 4; x < LCD_W; x += 8) {
+        const int len = x % 32 == 4 ? 3 : 1;
+        fill(x, top + 2, 1, len, c, false);
+        fill(x, bottom - len, 1, len, c, false);
+      }
+      break;
+    case LINES_BRACKETS: {  // corners at the top; the bottom row's brackets mark the lower corners
+      const int a = 8;
+      fill(LCD_X, top + 1, a, 1, c, false);
+      fill(LCD_X, top + 1, 1, a, c, false);
+      fill(LCD_W - a, top + 1, a, 1, c, false);
+      fill(LCD_W - 1, top + 1, 1, a, c, false);
+      break;
+    }
+    case LINES_HUD:  // lines with 45-degree tips bent into the LCD, like the main divider's ends
+      fill(6, top, LCD_W - 12, 2, c, false);
+      fill(6, bottom, LCD_W - 12, 2, c, false);
+      for (int i = 1; i <= 4; i++) {
+        fill(6 - i, top + i, 2, 1, c, false);
+        fill(LCD_W - 7 + i, top + i, 2, 1, c, false);
+        fill(6 - i, bottom + 1 - i, 2, 1, c, false);
+        fill(LCD_W - 7 + i, bottom + 1 - i, 2, 1, c, false);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
+  draw_lcd_edges();
   const int day_x = s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X;
   if (font_active()) {  // on the weekday row's bottom line
     font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY],
@@ -1403,10 +1451,12 @@ static void draw_indicator_labels(GContext *ctx) {
   static const int8_t BT_WIDTHS[] = { 8, 9 };  // widened B and T
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
+  const bool pm_cell = !is_24h() && s_settings.pm_in_box;
   struct { const char *label; bool on; GRect cell; const int8_t *letter_w; int letter_w_n; } ind[] = {
     { "BT",   s_connected,
       GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
-    { full ? "FULL" : "CHG", s_battery.is_charging || full,
+    // With the leading zero in 12-hour time, PM takes CHG's cell (the battery icon shows charging).
+    { pm_cell ? "PM" : full ? "FULL" : "CHG", pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full,
       GRect(BOX_LEFT + 2, BOX_TOP + 2, left_w - 3, top_h), NULL, 0 },
     { "DST",  s_now.tm_isdst > 0,
       GRect(BOX_DIV + 1, BOX_MID + 1, right_w - 2, bottom_h), NULL, 0 },
@@ -1417,7 +1467,7 @@ static void draw_indicator_labels(GContext *ctx) {
   if (font_active() && !(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
     if (!ind[i].on && !s_settings.ghosts) continue;
-    const GColor color = ind[i].on ? s_col[INDICATOR_COLORS[i]] : s_ghost;
+    const GColor color = !ind[i].on ? s_ghost : (i == 1 && pm_cell) ? s_col[COL_PM] : s_col[INDICATOR_COLORS[i]];
     const int density = ind[i].on ? DENSITY_FULL : s_label_off_density;
     if (font_active()) {
       const GRect c = ind[i].cell;
@@ -1458,7 +1508,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // COL_CASE's custom colour is no longer offered: the case is always Case color.
   const bool charcoal = !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
   if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 &&
-      !charcoal) {
+      !charcoal && s_settings.line_style == LINES_SOLID) {
     graphics_context_set_fill_color(ctx, GColorDarkGray);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 1, LCD_W, 1), 0, GCornerNone);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y + LCD_H, LCD_W, 1), 0, GCornerNone);
@@ -1716,6 +1766,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_TimeZero12))) {
+    s_settings.pm_in_box = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_TimeZero))) {
     s_settings.hour_no_zero = tuple_int(t) ? 0 : 1;
     settings_changed = true;
@@ -1904,6 +1958,7 @@ static void init(void) {
   if (s_settings.case_pattern > CASE_CHECKER) s_settings.case_pattern = CASE_SOLID;
   if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;
   if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
+  if (s_settings.pm_in_box > 1) s_settings.pm_in_box = 0;
   load_digit_font();
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
