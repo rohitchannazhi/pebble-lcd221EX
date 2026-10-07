@@ -1497,8 +1497,13 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // Case frame and LCD window.
   graphics_context_set_fill_color(ctx, s_col[COL_CASE]);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
-  graphics_context_set_fill_color(ctx, s_col[COL_EDGE]);
-  graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 2, LCD_W, LCD_H + 4), 0, GCornerNone);
+  // The LCD window edge: a plain band with solid lines. The other line styles draw their own edge
+  // (draw_lcd_edges) on the case instead, so the band is left out.
+  const bool plain_edge = s_settings.line_style == LINES_SOLID;
+  if (plain_edge) {
+    graphics_context_set_fill_color(ctx, s_col[COL_EDGE]);
+    graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 2, LCD_W, LCD_H + 4), 0, GCornerNone);
+  }
   graphics_context_set_fill_color(ctx, s_lcd);
   graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y, LCD_W, LCD_H), 0, GCornerNone);
   // A black LCD (inverted) would melt into a plain black case: mark the panel's edges. (With
@@ -1516,8 +1521,9 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   s_fb = graphics_capture_frame_buffer(ctx);
   if (!s_fb) return;
   if (charcoal) {
-    draw_case_pattern(0, LCD_Y - 3, s_settings.case_pattern * 4);
-    draw_case_pattern(LCD_Y + LCD_H + 2, PBL_DISPLAY_HEIGHT - 1, s_settings.case_pattern * 4);
+    const int band = plain_edge ? 2 : 0;  // without the plain edge, the case runs up to the LCD
+    draw_case_pattern(0, LCD_Y - 1 - band, s_settings.case_pattern * 4);
+    draw_case_pattern(LCD_Y + LCD_H + band, PBL_DISPLAY_HEIGHT - 1, s_settings.case_pattern * 4);
   }
   draw_lcd();
   graphics_release_frame_buffer(ctx, s_fb);
