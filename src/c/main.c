@@ -58,6 +58,11 @@ enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 // checkerboard. The value is also the dots' density out of 16 (see DENSITY_FULL) divided by 4.
 enum { CASE_SOLID = 0, CASE_DOTS = 1, CASE_CHECKER = 2 };
 
+// Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
+enum { DIGITS_SEGMENT = 0, DIGITS_OXANIUM = 1, DIGITS_CHAKRA = 2, DIGITS_ORBITRON = 3, DIGITS_COUNT };
+// Divider line styles.
+enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
+
 // Date padding: zeros, a blank for the first number only, or blanks for both numbers.
 enum { PAD_ZERO = 0, PAD_FIRST_BLANK = 1, PAD_BOTH_BLANK = 2 };
 
@@ -98,6 +103,9 @@ typedef struct {
   uint8_t date_pad;            // single-digit date numbers: PAD_ZERO (06-05), PAD_FIRST_BLANK ( 6-05), PAD_BOTH_BLANK ( 6- 5)
   uint8_t date_range;          // 1: the date box shows today's high and low; the day of the month moves up next to the weekday
   uint8_t case_pattern;        // black case only: CASE_SOLID, or dark gray dots over it (CASE_DOTS, CASE_CHECKER)
+  // Added at the end: settings saved before are shorter, and these keep their defaults (0).
+  uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
+  uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
 } Settings;
 
 typedef struct {
@@ -489,6 +497,125 @@ static void draw_day(int x, int y, const char *text, bool narrow, GColor ink) {
 }
 
 // ---------------------------------------------------------------------------
+// Fonts for the other digit styles: pre-rendered glyphs (tools/gen_fonts.py, resources/fonts)
+
+// The font file's groups, one per screen area (the order of GROUPS in tools/gen_fonts.py).
+typedef enum { FG_TIME, FG_WEEKDAY, FG_DATE, FG_RANGE, FG_RIGHT, FG_LABEL, FG_COUNT } FontGroup;
+#define DEGREE_CHAR '\xB0'  // the degree mark's code in the font file
+enum { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT };
+
+static uint8_t *s_font;  // the selected font's file, or NULL for the 7-segment digits
+
+static bool font_active(void) { return s_font != NULL; }
+
+static int le16(const uint8_t *p) { return p[0] | p[1] << 8; }
+
+static int font_height(FontGroup g) { return s_font[4 + 4 * g]; }
+
+// A glyph's table entry: char, width, advance, left bearing (signed), bitmap offset (2 bytes).
+static const uint8_t *font_glyph(FontGroup g, char ch) {
+  const int count = s_font[4 + 4 * g + 1];
+  const uint8_t *table = s_font + le16(s_font + 4 + 4 * g + 2);
+  for (int i = 0; i < count; i++) {
+    if (table[6 * i] == (uint8_t)ch) return table + 6 * i;
+  }
+  return NULL;
+}
+
+// Checks a font file before it is used: its header, and that every table and bitmap is inside it.
+static bool font_valid(const uint8_t *f, size_t size) {
+  if (size < 4 + 4 * FG_COUNT || f[0] != 'L' || f[1] != 'F' || f[2] != 1 || f[3] != FG_COUNT) return false;
+  for (int g = 0; g < FG_COUNT; g++) {
+    const size_t h = f[4 + 4 * g], count = f[4 + 4 * g + 1], table = le16(f + 4 + 4 * g + 2);
+    if (table + 6 * count > size) return false;
+    for (size_t i = 0; i < count; i++) {
+      const uint8_t *e = f + table + 6 * i;
+      if ((size_t)le16(e + 4) + h * ((e[1] * 2 + 7) / 8) > size) return false;
+    }
+  }
+  return true;
+}
+
+// Loads the font of the chosen digit style (only that one is in memory), or none for the
+// 7-segment digits. If it can't be loaded, the face falls back to the 7-segment digits.
+static void load_digit_font(void) {
+  if (s_font) {
+    free(s_font);
+    s_font = NULL;
+  }
+  uint32_t id;
+  switch (s_settings.digit_style) {
+    case DIGITS_OXANIUM:  id = RESOURCE_ID_FONT_OXANIUM; break;
+    case DIGITS_CHAKRA:   id = RESOURCE_ID_FONT_CHAKRAPETCH; break;
+    case DIGITS_ORBITRON: id = RESOURCE_ID_FONT_ORBITRON; break;
+    default: return;
+  }
+  ResHandle handle = resource_get_handle(id);
+  const size_t size = resource_size(handle);
+  uint8_t *buf = malloc(size);
+  if (!buf) return;
+  if (resource_load(handle, buf, size) != size || !font_valid(buf, size)) {
+    free(buf);
+    return;
+  }
+  s_font = buf;
+}
+
+// Copies a glyph with its top-left corner at (x, y). Coverage 3 is the ink and 1-2 are shades
+// between the ink and the LCD colour, like the anti-aliased segments. With `density` below
+// DENSITY_FULL only the solid part is drawn, as dots (inactive indicator labels).
+static void draw_glyph(FontGroup g, const uint8_t *e, int x, int y, GColor ink, int density) {
+  const int w = e[1], h = font_height(g), stride = (w * 2 + 7) / 8;
+  const uint8_t *bits = s_font + le16(e + 4);
+  const uint8_t shade[4] = { 0, mix_color(ink, s_lcd, 1).argb, mix_color(ink, s_lcd, 2).argb, ink.argb };
+  for (int r = 0; r < h; r++) {
+    const int yy = y + r;
+    if (yy < 0 || yy >= PBL_DISPLAY_HEIGHT) continue;
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
+    for (int c = 0; c < w; c++) {
+      const int xx = x + c;
+      if (xx < row.min_x || xx > row.max_x) continue;
+      const int level = (bits[r * stride + (c >> 2)] >> (6 - 2 * (c & 3))) & 3;
+      if (level == 0) continue;
+      if (density >= DENSITY_FULL) row.data[xx] = shade[level];
+      else if (level >= 2 && BAYER4[yy & 3][xx & 3] < density) row.data[xx] = ink.argb;
+    }
+  }
+}
+
+// The width of a text (the sum of its advances); a space is as wide as a '0' (a blank digit).
+static int font_text_width(FontGroup g, const char *text) {
+  int w = 0;
+  for (const char *p = text; *p; p++) {
+    const uint8_t *e = font_glyph(g, *p == ' ' ? '0' : *p);
+    if (e) w += e[2];
+  }
+  return w;
+}
+
+// Draws a text in the box x..x+w-1, on the baseline `baseline`.
+static void font_draw_text(FontGroup g, const char *text, int x, int w, int baseline, int align,
+                           GColor ink, int density) {
+  if (align != ALIGN_LEFT) {
+    const int tw = font_text_width(g, text);
+    x += align == ALIGN_RIGHT ? w - tw : (w - tw) / 2;
+  }
+  const int top = baseline - font_height(g);
+  for (const char *p = text; *p; p++) {
+    const uint8_t *e = font_glyph(g, *p == ' ' ? '0' : *p);
+    if (!e) continue;
+    if (*p != ' ') draw_glyph(g, e, x + (int8_t)e[3], top, ink, density);
+    x += e[2];
+  }
+}
+
+// One glyph whose ink is centred on cx (the time's digits, each in its own box).
+static void font_draw_centered(FontGroup g, char ch, int cx, int baseline, GColor ink) {
+  const uint8_t *e = font_glyph(g, ch);
+  if (e) draw_glyph(g, e, cx - e[1] / 2, baseline - font_height(g), ink, DENSITY_FULL);
+}
+
+// ---------------------------------------------------------------------------
 // Data helpers
 
 static bool weather_valid(void) {
@@ -532,8 +659,9 @@ static void apply_theme(void) {
   bool inv = s_settings.inverted;
 
   // The digits.
-  s_slant = s_settings.slanted ? LCD_SLANT : 0;
-  s_smooth = LCD_AA && s_settings.slanted;
+  // (The fonts are upright.)
+  s_slant = s_settings.slanted && !font_active() ? LCD_SLANT : 0;
+  s_smooth = LCD_AA && s_slant != 0;
 
   // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
   // black or silver either way (Case color; the charcoal cases are black with a pattern).
@@ -867,6 +995,17 @@ static void draw_time(void) {
   // 12-hour: the first digit is blank or a 1 (the P sits where a 0 would be). 24-hour: the
   // leading zero is optional.
   int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero)) ? hour / 10 : DIGIT_BLANK;
+  if (font_active()) {
+    // Each digit centred in its box, the group centred on the digits' height; the font's colon
+    // is centred on the digits too (tools/gen_fonts.py).
+    const int base = ty + (th + font_height(FG_TIME)) / 2;
+    if (tens != DIGIT_BLANK) font_draw_centered(FG_TIME, '0' + tens, X[0] + tw / 2, base, s_col[COL_HOURS]);
+    font_draw_centered(FG_TIME, '0' + hour % 10, X[1] + tw / 2, base, s_col[COL_HOURS]);
+    font_draw_centered(FG_TIME, ':', (X[1] + tw + X[2]) / 2, base, s_col[COL_COLON]);
+    font_draw_centered(FG_TIME, '0' + s_now.tm_min / 10, X[2] + tw / 2, base, s_col[COL_MINUTES]);
+    font_draw_centered(FG_TIME, '0' + s_now.tm_min % 10, X[3] + tw / 2, base, s_col[COL_MINUTES]);
+    return;
+  }
   if (is24) {
     draw_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS]);
   } else {
@@ -896,6 +1035,13 @@ static void draw_date(void) {
   const int y = ROW3_Y + ROW3_H - h;  // bottom aligned with the right box's digits
   const bool blank_first = s_settings.date_pad != PAD_ZERO;
   const bool blank_second = s_settings.date_pad == PAD_BOTH_BLANK;
+  if (font_active()) {
+    char text[8];
+    snprintf(text, sizeof(text), "%c%d-%c%d", (first >= 10 || !blank_first) ? '0' + first / 10 : ' ',
+             first % 10, (second >= 10 || !blank_second) ? '0' + second / 10 : ' ', second % 10);
+    font_draw_text(FG_DATE, text, 0, ROW3_DIV_X, ROW3_Y + ROW3_H, ALIGN_CENTER, ink, DENSITY_FULL);
+    return;
+  }
   draw_digit(27, y, w, h, (first >= 10 || !blank_first) ? first / 10 : DIGIT_BLANK, ink);
   draw_digit(46, y, w, h, first % 10, ink);
   draw_segments(64, y, 8, h, SEG_G, SEG_G, ink);  // dash: the font's middle bar
@@ -908,6 +1054,11 @@ static void draw_date(void) {
 static void draw_month_day(void) {
   const int d = s_now.tm_mday, w = 11, h = BOX_BOTTOM - BOX_TOP;
   const bool blank = d < 10 && s_settings.date_pad != PAD_ZERO;
+  if (font_active()) {
+    char text[3] = { blank ? ' ' : '0' + d / 10, '0' + d % 10, 0 };
+    font_draw_text(FG_DATE, text, 75, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
+    return;
+  }
   draw_digit(75, WEEKDAY_Y, w, h, blank ? DIGIT_BLANK : d / 10, s_col[COL_WEEKDAY]);
   draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
@@ -915,6 +1066,12 @@ static void draw_month_day(void) {
 // Right box, option 1: the seconds, two digits centred in the box.
 static void draw_seconds(void) {
   const GColor ink = s_col[COL_RIGHT];
+  if (font_active()) {
+    char text[3] = { '0' + s_now.tm_sec / 10, '0' + s_now.tm_sec % 10, 0 };
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, ROW3_Y + ROW3_H, ALIGN_CENTER,
+                   ink, DENSITY_FULL);
+    return;
+  }
   draw_digit(143, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec / 10, ink);
   draw_digit(165, ROW3_Y, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec % 10, ink);
 }
@@ -928,6 +1085,17 @@ static void draw_temperature(void) {
   int temp = display_temp(s_weather.temp), v = abs(temp);
   bool valid = weather_valid();
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
+  if (font_active()) {
+    // Right-aligned. Below zero or from 100 up there is no degree mark, so the font can stay
+    // as big as two digits and a degree mark allow (tools/gen_fonts.py).
+    char text[8];
+    if (!valid) snprintf(text, sizeof(text), "--%c", DEGREE_CHAR);
+    else if (neg || hundred) snprintf(text, sizeof(text), "%d", temp);
+    else snprintf(text, sizeof(text), "%d%c", temp, DEGREE_CHAR);
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 5, dy + dh, ALIGN_RIGHT, ink,
+                   DENSITY_FULL);
+    return;
+  }
   // The minus is the font's middle bar in a narrow box; the "1" is the right
   // verticals of a full-width digit placed so they land in the sign slot.
   // Unlit parts go first so the lit one is never covered by a ghost.
@@ -968,7 +1136,8 @@ static void draw_temperature(void) {
 #define RANGE_HIGH_X 65   // and of the high's
 #define RANGE_DIV_X 60    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
-  const int h = RANGE_DIGIT_H, w = RANGE_DIGIT_W, y = ROW3_Y + ROW3_H - h;
+  const int h = font_active() ? font_height(FG_RANGE) : RANGE_DIGIT_H, w = RANGE_DIGIT_W;
+  const int y = ROW3_Y + ROW3_H - h;
   const int d1 = x + 20, d2 = x + 37;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
@@ -977,6 +1146,13 @@ static void draw_range_value(int x, int t10, bool valid, const char *arrow, GCol
   const int ay = y + (h - 6) / 2, ax = x + (h / 2) * s_slant / 1000;
   draw_dots(ax, ay, arrow, 11, 6, 1, 1, true, ink);
   if (neg) fill(ax + 1 + 10 * s_slant / 1000, ay - 10, 9, 3, ink, false);
+  if (font_active()) {  // right-aligned after the arrow (100 and up runs a little further left)
+    char text[6];
+    if (valid) snprintf(text, sizeof(text), "%d", v);
+    else snprintf(text, sizeof(text), "--");
+    font_draw_text(FG_RANGE, text, x + 12, 40, y + h, ALIGN_RIGHT, ink, DENSITY_FULL);
+    return;
+  }
   // The "1" of 100+: the right verticals of a digit placed so they land between the arrow and
   // the first digit. No unlit ghost at this size: it would crowd the digits.
   if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
@@ -986,6 +1162,30 @@ static void draw_range_value(int x, int t10, bool valid, const char *arrow, GCol
   } else {
     draw_digit(d1, y, w, h, (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
     draw_digit(d2, y, w, h, v % 10, ink);
+  }
+}
+
+// The short divider between the low and the high (rows top..bottom), in the divider line style.
+static void draw_range_divider(int x, int top, int bottom) {
+  const GColor c = s_col[COL_RULES];
+  switch (s_settings.line_style) {
+    case LINES_SEGMENTED:
+      for (int y = top; y <= bottom; y += 4) fill(x, y, 1, 2, c, false);
+      break;
+    case LINES_RULER:  // a line with a dot at each end
+      fill(x, top + 4, 1, bottom - top - 7, c, false);
+      fill(x, top + 2, 1, 1, c, false);
+      fill(x, bottom - 2, 1, 1, c, false);
+      break;
+    case LINES_BRACKETS:  // fainter, so the corners frame the box
+      fill(x, top + 6, 1, bottom - top - 11, mix_color(c, s_lcd, 2), false);
+      break;
+    case LINES_HUD:  // a small T on top
+      fill(x, top + 3, 1, bottom - top - 5, c, false);
+      fill(x - 1, top + 2, 3, 1, c, false);
+      break;
+    default:
+      fill(x, top, 1, bottom - top + 1, c, false);
   }
 }
 
@@ -1007,8 +1207,7 @@ static void draw_temperature_range(void) {
   const bool valid = range_valid();
   draw_range_value(RANGE_LOW_X, s_weather.temp_min, valid, DOWN, s_col[COL_DATE]);
   draw_range_value(RANGE_HIGH_X, s_weather.temp_max, valid, UP, s_col[COL_DATE]);
-  const int top = ROW3_Y + ROW3_H - RANGE_DIGIT_H - 2;
-  fill(RANGE_DIV_X, top, 1, ROW3_Y + ROW3_H + 2 - top, s_col[COL_RULES], false);
+  draw_range_divider(RANGE_DIV_X, ROW3_Y + ROW3_H - RANGE_DIGIT_H - 2, ROW3_Y + ROW3_H + 1);
 }
 
 // A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
@@ -1026,15 +1225,73 @@ static bool seconds_showing(void) {
   return !s_settings.seconds_on_shake || burst_active();
 }
 
+// Viewfinder corners (8 px arms) of the box x0..x1, y0..y1.
+static void draw_brackets(int x0, int x1, int y0, int y1, GColor c) {
+  const int a = 8;
+  fill(x0, y0, a, 1, c, false);
+  fill(x0, y0, 1, a, c, false);
+  fill(x1 - a + 1, y0, a, 1, c, false);
+  fill(x1, y0, 1, a, c, false);
+  fill(x0, y1, a, 1, c, false);
+  fill(x0, y1 - a + 1, 1, a, c, false);
+  fill(x1 - a + 1, y1, a, 1, c, false);
+  fill(x1, y1 - a + 1, 1, a, c, false);
+}
+
+// The lines between the time and the bottom row and between the date box and the right box, in
+// the chosen style.
+static void draw_rules(void) {
+  const GColor c = s_col[COL_RULES];
+  const int y0 = ROW3_LINE_Y, yb = LCD_Y + LCD_H - 1, xd = ROW3_DIV_X;
+  switch (s_settings.line_style) {
+    case LINES_SEGMENTED:  // dashes, like an instrument display
+      for (int x = 2; x < LCD_W - 2; x += 9) fill(x, y0, x + 6 > LCD_W - 2 ? LCD_W - 2 - x : 6, 2, c, false);
+      for (int y = y0 + 4; y <= yb; y += 7) fill(xd, y, 2, y + 4 > yb + 1 ? yb + 1 - y : 4, c, false);
+      break;
+    case LINES_RULER:  // a hairline with ruler ticks, a longer one every 32 px
+      fill(LCD_X, y0, LCD_W, 1, c, false);
+      for (int x = 4; x < LCD_W; x += 8) fill(x, y0 + 1, 1, x % 32 == 4 ? 3 : 1, c, false);
+      fill(xd, y0, 1, yb - y0 + 1, c, false);
+      for (int y = y0 + 8; y < yb; y += 8) fill(xd + 1, y, 2, 1, c, false);
+      break;
+    case LINES_BRACKETS:  // no lines: corners around the two boxes
+      draw_brackets(2, xd - 3, y0 + 1, yb - 1, c);
+      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, c);
+      break;
+    case LINES_HUD: {  // the line splits into two 45-degree arms that meet the divider, with angled tips
+      const int arm = 12;
+      fill(6, y0, xd - arm - 6 + 1, 2, c, false);
+      fill(xd + arm, y0, LCD_W - 7 - (xd + arm) + 1, 2, c, false);
+      for (int i = 0; i < arm; i++) {
+        fill(xd - arm + i, y0 + i, 2, 1, c, false);
+        fill(xd + arm - i, y0 + i, 2, 1, c, false);
+      }
+      fill(xd, y0 + arm - 1, 2, yb - y0 - arm + 2, c, false);
+      for (int i = 0; i <= 4; i++) {
+        fill(6 - i, y0 + i, 2, 1, c, false);
+        fill(LCD_W - 7 + i, y0 + i, 2, 1, c, false);
+      }
+      break;
+    }
+    default:
+      fill(LCD_X, y0, LCD_W, 2, c, false);
+      fill(xd, y0, 2, yb - y0 + 1, c, false);
+  }
+}
+
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
-  draw_day(s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X, WEEKDAY_Y, DAYS[s_now.tm_wday],
-           s_settings.date_range, s_col[COL_WEEKDAY]);
+  const int day_x = s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X;
+  if (font_active()) {  // on the weekday row's bottom line
+    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY],
+                   DENSITY_FULL);
+  } else {
+    draw_day(day_x, WEEKDAY_Y, DAYS[s_now.tm_wday], s_settings.date_range, s_col[COL_WEEKDAY]);
+  }
   if (s_settings.date_range) draw_month_day();
   draw_indicator_frame();
   draw_time();
-  fill(LCD_X, ROW3_LINE_Y, LCD_W, 2, s_col[COL_RULES], false);
-  fill(ROW3_DIV_X, ROW3_LINE_Y, 2, LCD_Y + LCD_H - ROW3_LINE_Y, s_col[COL_RULES], false);
+  draw_rules();
   if (s_settings.date_range) draw_temperature_range();
   else draw_date();
   if (seconds_showing()) draw_seconds();
@@ -1107,11 +1364,24 @@ static void draw_indicator_labels(GContext *ctx) {
     { "MUTE", s_quiet,
       GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
   };
+  // With a font, the labels are its glyphs, centred in their cells (drawn into the framebuffer).
+  if (font_active() && !(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
     if (!ind[i].on && !s_settings.ghosts) continue;
-    draw_fitted_text(ctx, ind[i].label, ind[i].cell, ind[i].letter_w, ind[i].letter_w_n, LABEL_H,
-                     ind[i].on ? s_col[INDICATOR_COLORS[i]] : s_ghost,
-                     ind[i].on ? DENSITY_FULL : s_label_off_density);
+    const GColor color = ind[i].on ? s_col[INDICATOR_COLORS[i]] : s_ghost;
+    const int density = ind[i].on ? DENSITY_FULL : s_label_off_density;
+    if (font_active()) {
+      const GRect c = ind[i].cell;
+      font_draw_text(FG_LABEL, ind[i].label, c.origin.x, c.size.w,
+                     c.origin.y + (c.size.h + font_height(FG_LABEL)) / 2, ALIGN_CENTER, color, density);
+    } else {
+      draw_fitted_text(ctx, ind[i].label, ind[i].cell, ind[i].letter_w, ind[i].letter_w_n, LABEL_H,
+                       color, density);
+    }
+  }
+  if (font_active()) {
+    graphics_release_frame_buffer(ctx, s_fb);
+    s_fb = NULL;
   }
 }
 
@@ -1453,6 +1723,21 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     settings_changed = true;
   }
   // Appearance
+  bool font_changed = false;
+  if ((t = dict_find(iter, MESSAGE_KEY_DigitStyle))) {
+    const char *d = t->value->cstring;
+    const uint8_t style = strcmp(d, "oxanium") == 0 ? DIGITS_OXANIUM : strcmp(d, "chakra") == 0 ? DIGITS_CHAKRA
+        : strcmp(d, "orbitron") == 0 ? DIGITS_ORBITRON : DIGITS_SEGMENT;
+    font_changed = style != s_settings.digit_style;
+    s_settings.digit_style = style;
+    settings_changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_LineStyle))) {
+    const char *l = t->value->cstring;
+    s_settings.line_style = strcmp(l, "segmented") == 0 ? LINES_SEGMENTED : strcmp(l, "ruler") == 0 ? LINES_RULER
+        : strcmp(l, "brackets") == 0 ? LINES_BRACKETS : strcmp(l, "hud") == 0 ? LINES_HUD : LINES_SOLID;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_CaseColor))) {
     const char *c = t->value->cstring;
     s_settings.silver = strcmp(c, "silver") == 0;
@@ -1519,6 +1804,7 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
 
   if (settings_changed) {
     persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+    if (font_changed) load_digit_font();
     apply_theme();
     apply_backlight();
     update_shake_subscription();
@@ -1559,6 +1845,7 @@ static void init(void) {
     .vibe_connect = VIBE_SHORT,
     .seconds_burst_s = SECONDS_BURST_DEFAULT_S,
   };
+  // Settings saved by older versions are shorter: the fields added at the end keep their defaults.
   persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   // Old saves left padding where these two now live.
   if (s_settings.seconds_on_shake > 1) s_settings.seconds_on_shake = 0;
@@ -1566,6 +1853,9 @@ static void init(void) {
   if (s_settings.date_pad > PAD_BOTH_BLANK) s_settings.date_pad = PAD_ZERO;
   if (s_settings.date_range > 1) s_settings.date_range = 0;
   if (s_settings.case_pattern > CASE_CHECKER) s_settings.case_pattern = CASE_SOLID;
+  if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;
+  if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
+  load_digit_font();
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
     s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
@@ -1614,6 +1904,7 @@ static void deinit(void) {
   health_service_events_unsubscribe();
 #endif
   window_destroy(s_window);
+  if (s_font) free(s_font);
 }
 
 int main(void) {

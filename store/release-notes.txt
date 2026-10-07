@@ -2,3 +2,5 @@ New: the date box can show today's high and low temperature instead of the date 
 Changed: the DST indicator moved into the indicator box, in place of SIG.
 Removed: the hourly chime's sounds. "Vibrate on the hour" replaces it (a chime set to vibration only keeps vibrating).
 New: two charcoal case colors, dotted and checkerboard, which set a black (inverted) LCD apart from the case.
+New: Digit style: the 7-segment digits, or one of three fonts (Oxanium, Chakra Petch, Wide) for all the text and numbers on the LCD.
+New: Divider lines: solid, segmented, ruler ticks, corner brackets or HUD chamfer.

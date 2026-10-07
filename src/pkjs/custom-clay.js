@@ -37,6 +37,12 @@ module.exports = function () {
     dateFormat.on('change', syncRightBox);
     syncRightBox();
 
+    // Slanted digits are a 7-segment thing; the fonts are upright.
+    var digitStyle = item('DigitStyle'), slanted = item('Slanted');
+    function syncDigits() { if (digitStyle.get() === 'segment') slanted.show(); else slanted.hide(); }
+    digitStyle.on('change', syncDigits);
+    syncDigits();
+
     // The colour picker only matters while "Custom color..." is the backlight choice.
     var backlight = item('BacklightColor'), custom = item('BacklightCustom');
     function syncCustom() { if (backlight.get() === 'custom') custom.show(); else custom.hide(); }

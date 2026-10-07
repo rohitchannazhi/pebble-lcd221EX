@@ -166,6 +166,26 @@ module.exports = [
         "description": "Light digits on a dark LCD, like a negative-display watch. The case keeps its color."
       },
       {
+        "type": "select", "messageKey": "DigitStyle", "label": "Digit style", "defaultValue": "segment",
+        "description": "7-segment is the LCD look, with faint unlit segments. The fonts are used for every text and number on the LCD (not the top and bottom bars).",
+        "options": [
+          { "label": "7-segment", "value": "segment" },
+          { "label": "Oxanium", "value": "oxanium" },
+          { "label": "Chakra Petch", "value": "chakra" },
+          { "label": "Wide (based on Orbitron)", "value": "orbitron" }
+        ]
+      },
+      {
+        "type": "select", "messageKey": "LineStyle", "label": "Divider lines", "defaultValue": "solid",
+        "options": [
+          { "label": "Solid", "value": "solid" },
+          { "label": "Segmented", "value": "segmented" },
+          { "label": "Ruler ticks", "value": "ruler" },
+          { "label": "Corner brackets", "value": "brackets" },
+          { "label": "HUD chamfer", "value": "hud" }
+        ]
+      },
+      {
         "type": "toggle", "messageKey": "Slanted", "label": "Slanted digits", "defaultValue": true,
         "description": "Lean the digits like the original watch. Straight digits are sharper."
       },

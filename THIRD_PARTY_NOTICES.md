@@ -13,6 +13,20 @@ font by **Jan Bobrowski** ("~jb"), <https://torinak.com/font/7-segment>, version
   font, it stays under the same licence. The outlines are not sold on their own.
 - The font file carries no copyright line or Reserved Font Name.
 
+## Oxanium, Chakra Petch and Orbitron (digit style fonts)
+
+The "Digit style" fonts are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
+`resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
+The font files themselves are not included.
+
+- **Oxanium**: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium).
+- **Chakra Petch**: Copyright 2018 The Chakra Petch Project Authors (https://github.com/m4rc1e/Chakra-Petch.git).
+- **Orbitron**: Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron),
+  with Reserved Font Name "Orbitron". The rendered version is a Modified Version, so it is
+  offered as "Wide (based on Orbitron)" and not under the reserved name.
+- Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt));
+  the rendered files stay under the same licence.
+
 ## Clay (settings page library)
 
 The phone-side settings page is built with **pebble-clay**, Copyright (c) 2016 Pebble

@@ -46,6 +46,8 @@
       "VibeDisconnect",
       "VibeConnect",
       "HourlyVibe",
+      "DigitStyle",
+      "LineStyle",
       "CustomColors",
       "ColCase",
       "ColTopLeft",
@@ -78,7 +80,10 @@
           "name": "MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
-        }
+        },
+        { "type": "raw", "name": "FONT_OXANIUM", "file": "fonts/oxanium.bin" },
+        { "type": "raw", "name": "FONT_CHAKRAPETCH", "file": "fonts/chakrapetch.bin" },
+        { "type": "raw", "name": "FONT_ORBITRON", "file": "fonts/orbitron.bin" }
       ]
     }
   }
