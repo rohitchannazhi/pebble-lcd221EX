@@ -23,7 +23,8 @@ The font files themselves are not included.
 - **Chakra Petch**: Copyright 2018 The Chakra Petch Project Authors (https://github.com/m4rc1e/Chakra-Petch.git).
 - **Orbitron**: Copyright 2018 The Orbitron Project Authors (https://github.com/theleagueof/orbitron),
   with Reserved Font Name "Orbitron". The rendered version is a Modified Version, so it is
-  offered as "Wide (based on Orbitron)" and not under the reserved name.
+  offered as "Wide (based on Orbitron)" and not under the reserved name. Its small indicator labels use
+  Oxanium's letters, which read better at that size.
 - Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt));
   the rendered files stay under the same licence.
 

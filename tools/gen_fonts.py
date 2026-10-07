@@ -9,7 +9,7 @@ size is fixed by its widest possible text, so it never changes with the value sh
 
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
     oxanium/Oxanium[wght].ttf, chakrapetch/ChakraPetch-Bold.ttf, orbitron/Orbitron[wght].ttf
-Usage (needs Pillow):
+Usage (needs Pillow; give all three, as one may borrow another's label letters, see LABEL_FONT):
     python3 tools/gen_fonts.py Oxanium.ttf ChakraPetch-Bold.ttf Orbitron.ttf
 
 File format (all offsets absolute, little-endian):
@@ -43,6 +43,9 @@ GROUPS = [
 FONTS = {  # output name -> variable-font weight (None: a static font)
     "oxanium": 700, "chakrapetch": None, "orbitron": 700,
 }
+# The small indicator labels of a font whose letters are hard to tell apart at 10 px (Orbitron's
+# D and B read as C and E) come from another one.
+LABEL_FONT = {"orbitron": "oxanium"}
 
 
 def load(path, size, weight):
@@ -102,9 +105,11 @@ def render_group(path, weight, chars, ref, height, fits):
     return h, glyphs
 
 
-def build(path, weight):
-    groups = [render_group(path, weight, chars, ref, height, fits)
-              for _, chars, ref, height, fits in GROUPS]
+def build(name, paths):
+    groups = []
+    for group, chars, ref, height, fits in GROUPS:
+        src = LABEL_FONT.get(name, name) if group == "label" else name
+        groups.append(render_group(paths[src], FONTS[src], chars, ref, height, fits))
     header = bytearray(b"LF\x01" + bytes([len(groups)]))
     pos = len(header) + 4 * len(groups)
     tables, bitmaps = [], bytearray()
@@ -129,10 +134,12 @@ def build(path, weight):
 def main():
     out = Path(__file__).resolve().parent.parent / "resources" / "fonts"
     out.mkdir(parents=True, exist_ok=True)
+    paths = {}
     for arg in sys.argv[1:]:
         key = Path(arg).name.lower().split("[")[0].split("-")[0].replace(".ttf", "")
-        name = next(n for n in FONTS if n.startswith(key[:6]))
-        blob, sizes = build(arg, FONTS[name])
+        paths[next(n for n in FONTS if n.startswith(key[:6]))] = arg
+    for name in paths:
+        blob, sizes = build(name, paths)
         (out / f"{name}.bin").write_bytes(blob)
         print(f"{name}.bin: {len(blob)} bytes, heights {sizes}")
 
