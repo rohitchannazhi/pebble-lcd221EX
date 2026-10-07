@@ -8,3 +8,4 @@ Changed: the top bar shows a battery icon and a walking figure instead of the wo
 Fixed: with corner brackets, the bottom row's numbers are centred between the brackets.
 New: Leading zero in 12-hour time (07:05), with PM in the indicator box in place of CHG.
 Changed: the LCD window edges follow the divider line style, and the bottom row is centred between the divider and the bottom of the LCD.
+Fixed: the face is centred left to right (the font clocks sat a little left), and with corner brackets the LCD's edge has brackets only at its corners.

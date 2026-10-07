@@ -712,7 +712,7 @@ static void apply_backlight(void) {
 #define LCD_H 176
 
 // Row 1: weekday (left) and the 2x2 indicator box (right).
-#define WEEKDAY_X 12
+#define WEEKDAY_X 8  // as far from the edge as the indicator box is from the other one
 #define WEEKDAY_NARROW_X 6  // the narrowed weekday, followed by the day of the month
 #define WEEKDAY_Y 34
 #define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
@@ -1002,11 +1002,16 @@ static void draw_time(void) {
     // Each digit centred in its box, the group centred on the digits' height; the font's colon
     // is centred on the digits too (tools/gen_fonts.py).
     const int base = ty + (th + font_height(FG_TIME)) / 2;
-    if (tens != DIGIT_BLANK) font_draw_centered(FG_TIME, '0' + tens, X[0] + tw / 2, base, s_col[COL_HOURS]);
-    font_draw_centered(FG_TIME, '0' + hour % 10, X[1] + tw / 2, base, s_col[COL_HOURS]);
-    font_draw_centered(FG_TIME, ':', (X[1] + tw + X[2]) / 2, base, s_col[COL_COLON]);
-    font_draw_centered(FG_TIME, '0' + s_now.tm_min / 10, X[2] + tw / 2, base, s_col[COL_MINUTES]);
-    font_draw_centered(FG_TIME, '0' + s_now.tm_min % 10, X[3] + tw / 2, base, s_col[COL_MINUTES]);
+    // (The boxes suit the slanted segments; upright, they sit FONT_TIME_DX further right, which
+    // centres the time on the screen.)
+    enum { FONT_TIME_DX = 3 };
+    const int c0 = X[0] + tw / 2 + FONT_TIME_DX, c1 = X[1] + tw / 2 + FONT_TIME_DX;
+    const int c2 = X[2] + tw / 2 + FONT_TIME_DX, c3 = X[3] + tw / 2 + FONT_TIME_DX;
+    if (tens != DIGIT_BLANK) font_draw_centered(FG_TIME, '0' + tens, c0, base, s_col[COL_HOURS]);
+    font_draw_centered(FG_TIME, '0' + hour % 10, c1, base, s_col[COL_HOURS]);
+    font_draw_centered(FG_TIME, ':', (c1 + c2) / 2, base, s_col[COL_COLON]);
+    font_draw_centered(FG_TIME, '0' + s_now.tm_min / 10, c2, base, s_col[COL_MINUTES]);
+    font_draw_centered(FG_TIME, '0' + s_now.tm_min % 10, c3, base, s_col[COL_MINUTES]);
     return;
   }
   if (is24 || zero12) {
@@ -1104,7 +1109,7 @@ static void draw_temperature(void) {
     if (!valid) snprintf(text, sizeof(text), "--%c", DEGREE_CHAR);
     else if (neg || hundred) snprintf(text, sizeof(text), "%d", temp);
     else snprintf(text, sizeof(text), "%d%c", temp, DEGREE_CHAR);
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 5, row3_base(font_height(FG_RIGHT)),
+    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 4, row3_base(font_height(FG_RIGHT)),
                    ALIGN_RIGHT, ink, DENSITY_FULL);
     return;
   }
@@ -1144,9 +1149,9 @@ static void draw_temperature(void) {
 // digits).
 #define RANGE_DIGIT_W 15
 #define RANGE_DIGIT_H 30
-#define RANGE_LOW_X 1     // left edge of the low's arrow
-#define RANGE_HIGH_X 65   // and of the high's
-#define RANGE_DIV_X 60    // the divider between them
+#define RANGE_LOW_X 2     // left edge of the low's arrow
+#define RANGE_HIGH_X 66   // and of the high's
+#define RANGE_DIV_X 61    // the divider between them
 static void draw_range_value(int x, int t10, bool valid, const char *arrow, GColor ink) {
   const int h = font_active() ? font_height(FG_RANGE) : RANGE_DIGIT_H, w = RANGE_DIGIT_W;
   const int y = row3_base(h) - h;
@@ -1238,17 +1243,14 @@ static bool seconds_showing(void) {
   return !s_settings.seconds_on_shake || burst_active();
 }
 
-// Viewfinder corners (8 px arms) of the box x0..x1, y0..y1.
-static void draw_brackets(int x0, int x1, int y0, int y1, GColor c) {
+// Viewfinder corners (8 px arms) of the box x0..x1, y0..y1: the ones in `corners`.
+enum { CORNER_TL = 1, CORNER_TR = 2, CORNER_BL = 4, CORNER_BR = 8 };
+static void draw_brackets(int x0, int x1, int y0, int y1, int corners, GColor c) {
   const int a = 8;
-  fill(x0, y0, a, 1, c, false);
-  fill(x0, y0, 1, a, c, false);
-  fill(x1 - a + 1, y0, a, 1, c, false);
-  fill(x1, y0, 1, a, c, false);
-  fill(x0, y1, a, 1, c, false);
-  fill(x0, y1 - a + 1, 1, a, c, false);
-  fill(x1 - a + 1, y1, a, 1, c, false);
-  fill(x1, y1 - a + 1, 1, a, c, false);
+  if (corners & CORNER_TL) { fill(x0, y0, a, 1, c, false); fill(x0, y0, 1, a, c, false); }
+  if (corners & CORNER_TR) { fill(x1 - a + 1, y0, a, 1, c, false); fill(x1, y0, 1, a, c, false); }
+  if (corners & CORNER_BL) { fill(x0, y1, a, 1, c, false); fill(x0, y1 - a + 1, 1, a, c, false); }
+  if (corners & CORNER_BR) { fill(x1 - a + 1, y1, a, 1, c, false); fill(x1, y1 - a + 1, 1, a, c, false); }
 }
 
 // The lines between the time and the bottom row and between the date box and the right box, in
@@ -1267,9 +1269,10 @@ static void draw_rules(void) {
       fill(xd, y0, 1, yb - y0 + 1, c, false);
       for (int y = y0 + 8; y < yb; y += 8) fill(xd + 1, y, 2, 1, c, false);
       break;
-    case LINES_BRACKETS:  // no lines: corners around the two boxes
-      draw_brackets(2, xd - 3, y0 + 1, yb - 1, c);
-      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, c);
+    case LINES_BRACKETS:  // no lines: the two boxes' corners beside the divider (the LCD's own
+                          // corners, drawn with its edges, frame the outer side)
+      draw_brackets(2, xd - 3, y0 + 1, yb - 1, CORNER_TR | CORNER_BR, c);
+      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, CORNER_TL | CORNER_BL, c);
       break;
     case LINES_HUD: {  // the line splits into two 45-degree arms that meet the divider, with angled tips
       const int arm = 12;
@@ -1314,14 +1317,9 @@ static void draw_lcd_edges(void) {
         fill(x, bottom - len, 1, len, c, false);
       }
       break;
-    case LINES_BRACKETS: {  // corners at the top; the bottom row's brackets mark the lower corners
-      const int a = 8;
-      fill(LCD_X, top + 1, a, 1, c, false);
-      fill(LCD_X, top + 1, 1, a, c, false);
-      fill(LCD_W - a, top + 1, a, 1, c, false);
-      fill(LCD_W - 1, top + 1, 1, a, c, false);
+    case LINES_BRACKETS:  // only the LCD's four corners
+      draw_brackets(LCD_X, LCD_X + LCD_W - 1, top + 1, bottom, CORNER_TL | CORNER_TR | CORNER_BL | CORNER_BR, c);
       break;
-    }
     case LINES_HUD:  // lines with 45-degree tips bent into the LCD, like the main divider's ends
       fill(6, top, LCD_W - 12, 2, c, false);
       fill(6, bottom, LCD_W - 12, 2, c, false);
@@ -1341,8 +1339,8 @@ static void draw_lcd_edges(void) {
 static void draw_lcd(void) {
   draw_lcd_edges();
   const int day_x = s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X;
-  if (font_active()) {  // on the weekday row's bottom line
-    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY],
+  if (font_active()) {  // on the weekday row's bottom line (2 px left: the letters have side bearings)
+    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x - 2, 0, BOX_BOTTOM, ALIGN_LEFT, s_col[COL_WEEKDAY],
                    DENSITY_FULL);
   } else {
     draw_day(day_x, WEEKDAY_Y, DAYS[s_now.tm_wday], s_settings.date_range, s_col[COL_WEEKDAY]);
