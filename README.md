@@ -59,13 +59,14 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
 | | Digit style | **7-segment** (the LCD look, with unlit segments), Oxanium, Chakra Petch, Wide (based on Orbitron). A font is used for every text and number on the LCD (weekday, day, indicator labels, time, date, min / max, temperature and seconds), upright, without unlit segments; the top and bottom bars keep their own text. Below zero or from 100 up, the right box leaves out the degree mark |
 | | Divider lines | **Solid**, Segmented (dashes), Ruler ticks (a hairline with ticks), Corner brackets (no lines: brackets at the LCD's four corners and at the two boxes' corners beside the divider), HUD chamfer (the line splits into two 45° arms that meet the divider). The LCD window's top and bottom edges follow the same style (only Solid draws the plain LCD window edge band; Corner brackets leaves just the four corners). The bottom row is centred between the divider and the bottom of the LCD |
+| | Window edge | **Match the dividers** (the edge follows the divider style, as above), Center tab (the line steps out around the middle), Notched (broken in three places, ends bent inward), Circuit (a hairline with square nodes), Double line (two hairlines around a centre diamond). The LCD window edge colour (Use custom colors) colours every edge style |
 | | Indicators | **Grid** (the framed 2x2 box), Pills (one rounded pill each: filled when on, a faint dotted outline when off), Active only (just the labels that are on, right-aligned, two to a column), Icons (Bluetooth, a bolt for charging, a moon for Quiet Time, a sun for DST; PM in the bolt's place with the 12-hour leading zero) |
 | | Slanted digits | On, Off, 7-segment only (leans the digits like the original; straight digits have sharper edges) |
 | | Show unlit segments | On, Off |
 | | Backlight color | **System default** (your watch's normal colour), Amber, Warm white, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, **Custom color...** (shows the app's own color picker, the watch's 64 colors) |
 | Custom colors | Use custom colors | Off. When on, every part of the face except the case (which keeps its **Case color**) takes the color chosen below, and **Inverted colors** is ignored. The pickers start out as the normal black-on-white theme |
 | | Bezels | Top bezel left text, top bezel right text, bottom bezel WR / HR badge, heart rate, label |
-| | LCD panel | LCD window edge, LCD background, unlit segments and labels |
+| | LCD panel | LCD window edge (the lines above and below the LCD, in any Window edge style), LCD background, unlit segments and labels |
 | | Weekday and indicators | Weekday, indicator box outline, BT, CHG / FULL, DST, MUTE |
 | | Time | Hour digits, colon, minute digits, PM marker |
 | | Date and right box | Date / min-max temperature, divider lines, temperature / seconds (including the degree mark) |

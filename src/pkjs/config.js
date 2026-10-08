@@ -189,6 +189,17 @@ module.exports = [
         ]
       },
       {
+        "type": "select", "messageKey": "EdgeStyle", "label": "Window edge", "defaultValue": "match",
+        "description": "The lines above and below the display. With Use custom colors on, they take the LCD window edge colour.",
+        "options": [
+          { "label": "Match the dividers", "value": "match" },
+          { "label": "Center tab", "value": "tab" },
+          { "label": "Notched", "value": "notched" },
+          { "label": "Circuit", "value": "circuit" },
+          { "label": "Double line", "value": "double" }
+        ]
+      },
+      {
         "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "grid",
         "description": "How BT, CHG, DST and MUTE are shown next to the weekday.",
         "options": [

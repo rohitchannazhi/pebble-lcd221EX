@@ -63,6 +63,9 @@ enum { DIGITS_SEGMENT = 0, DIGITS_OXANIUM = 1, DIGITS_CHAKRA = 2, DIGITS_ORBITRO
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
+// The LCD window's top and bottom edges: like the dividers, or a style of their own.
+enum { EDGE_MATCH = 0, EDGE_TAB = 1, EDGE_NOTCHED = 2, EDGE_CIRCUIT = 3, EDGE_DOUBLE = 4, EDGE_COUNT };
+
 // What marks today's low and high: tall arrows, triangles, or LO / HI.
 enum { MARKS_TALL = 0, MARKS_TRIANGLES = 1, MARKS_LOHI = 2, MARKS_COUNT };
 
@@ -113,6 +116,8 @@ typedef struct {
   uint8_t pm_in_box;           // 1: 12-hour time has a leading zero and PM moves into the indicator box
   uint8_t indicator_style;     // IND_GRID, IND_PILLS, IND_ACTIVE or IND_ICONS
   uint8_t range_marks;         // MARKS_TALL, MARKS_TRIANGLES or MARKS_LOHI: what marks the low and the high
+  // Added after the padding ran out: settings saved before are 4 bytes shorter and keep this at 0.
+  uint8_t edge_style;          // EDGE_MATCH (the divider style's edge) or one of the window edge styles
 } Settings;
 
 typedef struct {
@@ -1349,11 +1354,75 @@ static void draw_rules(void) {
   }
 }
 
+// The window edge styles of their own, on both edges (`top` and `bottom` are the 2 px bands' first
+// rows). Outward means into the case, inward into the LCD.
+static void draw_lcd_edge_style(GColor c, int top, int bottom) {
+  const int cx = LCD_W / 2;
+  switch (s_settings.edge_style) {
+    case EDGE_TAB: {  // a 2 px line that steps 4 px out into the case around a raised centre section
+      const int x0 = 66, x1 = LCD_W - 66, rise = 4;
+      for (int e = 0; e < 2; e++) {
+        const int y = e ? bottom : top, out = e ? 1 : -1;  // out: away from the LCD
+        fill(LCD_X, y, x0 - LCD_X, 2, c, false);
+        fill(x1, y, LCD_W - x1, 2, c, false);
+        fill(x0 + rise, y + out * rise, x1 - x0 - 2 * rise, 2, c, false);
+        for (int i = 0; i <= rise; i++) {
+          fill(x0 + i, y + out * i, 2, 2, c, false);
+          fill(x1 - 2 - i, y + out * i, 2, 2, c, false);
+        }
+      }
+      break;
+    }
+    case EDGE_NOTCHED:  // a 2 px line with three small gaps, its ends bent 45 degrees into the LCD
+      for (int e = 0; e < 2; e++) {
+        const int y = e ? bottom : top, in = e ? -1 : 1;
+        int x = 6;
+        static const uint8_t GAPS[] = { 48, 98, 148 };  // each gap is 4 px
+        for (unsigned g = 0; g <= ARRAY_LENGTH(GAPS); g++) {
+          const int end = g < ARRAY_LENGTH(GAPS) ? GAPS[g] : LCD_W - 6;
+          fill(x, y, end - x, 2, c, false);
+          x = end + 4;
+        }
+        for (int i = 1; i <= 4; i++) {
+          fill(6 - i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
+          fill(LCD_W - 7 + i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
+        }
+      }
+      break;
+    case EDGE_CIRCUIT:  // a hairline with square nodes on it, like a circuit trace
+      for (int e = 0; e < 2; e++) {
+        const int line = e ? bottom : top + 1;
+        fill(LCD_X, line, LCD_W, 1, c, false);
+        for (int x = 18; x < LCD_W; x += 40) fill(x, line - 2, 5, 5, c, false);
+      }
+      break;
+    case EDGE_DOUBLE:  // two hairlines, broken by a diamond in the middle
+      for (int e = 0; e < 2; e++) {
+        const int y = e ? bottom : top - 1;  // the outer line (the inner one is 2 px closer)
+        for (int k = 0; k < 2; k++) {
+          fill(LCD_X, y + 2 * k, cx - 7, 1, c, false);
+          fill(cx + 7, y + 2 * k, LCD_W - cx - 7, 1, c, false);
+        }
+        for (int i = 0; i < 4; i++) fill(cx - i, y + 1 - 3 + i, 2 * i + 1, 1, c, false);  // upper half
+        for (int i = 0; i < 3; i++) fill(cx - i, y + 1 + 3 - i, 2 * i + 1, 1, c, false);  // lower half
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 // The LCD window's top and bottom edges (the 2px bands between it and the case) in the divider
 // line style, in the dividers' colour. Solid keeps the plain edge drawn in canvas_update.
 static void draw_lcd_edges(void) {
-  const GColor c = s_col[COL_RULES];
+  // The window edge colour with custom colours; otherwise the dividers' colour (the plain theme's
+  // edge is black, which a black case would hide).
+  const GColor c = s_colors.enabled ? s_col[COL_EDGE] : s_col[COL_RULES];
   const int top = LCD_Y - 2, bottom = LCD_Y + LCD_H;  // each band is 2 rows
+  if (s_settings.edge_style != EDGE_MATCH) {
+    draw_lcd_edge_style(c, top, bottom);
+    return;
+  }
   switch (s_settings.line_style) {
     case LINES_SEGMENTED:
       for (int x = 2; x < LCD_W - 2; x += 9) {
@@ -1673,9 +1742,9 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // Case frame and LCD window.
   graphics_context_set_fill_color(ctx, s_col[COL_CASE]);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
-  // The LCD window edge: a plain band with solid lines. The other line styles draw their own edge
-  // (draw_lcd_edges) on the case instead, so the band is left out.
-  const bool plain_edge = s_settings.line_style == LINES_SOLID;
+  // The LCD window edge: a plain band with solid lines (and the edge matching them). The other
+  // styles draw their own edge (draw_lcd_edges) on the case instead, so the band is left out.
+  const bool plain_edge = s_settings.edge_style == EDGE_MATCH && s_settings.line_style == LINES_SOLID;
   if (plain_edge) {
     graphics_context_set_fill_color(ctx, s_col[COL_EDGE]);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 2, LCD_W, LCD_H + 4), 0, GCornerNone);
@@ -1687,7 +1756,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // COL_CASE's custom colour is no longer offered: the case is always Case color.
   const bool charcoal = !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
   if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 &&
-      !charcoal && s_settings.line_style == LINES_SOLID) {
+      !charcoal && plain_edge) {
     graphics_context_set_fill_color(ctx, GColorDarkGray);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 1, LCD_W, 1), 0, GCornerNone);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y + LCD_H, LCD_W, 1), 0, GCornerNone);
@@ -1946,6 +2015,12 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_EdgeStyle))) {
+    const char *v = t->value->cstring;
+    s_settings.edge_style = strcmp(v, "tab") == 0 ? EDGE_TAB : strcmp(v, "notched") == 0 ? EDGE_NOTCHED
+        : strcmp(v, "circuit") == 0 ? EDGE_CIRCUIT : strcmp(v, "double") == 0 ? EDGE_DOUBLE : EDGE_MATCH;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_RangeMarks))) {
     const char *v = t->value->cstring;
     s_settings.range_marks = strcmp(v, "triangles") == 0 ? MARKS_TRIANGLES : strcmp(v, "lohi") == 0 ? MARKS_LOHI
@@ -2147,6 +2222,7 @@ static void init(void) {
   if (s_settings.pm_in_box > 1) s_settings.pm_in_box = 0;
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_GRID;
   if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
+  if (s_settings.edge_style >= EDGE_COUNT) s_settings.edge_style = EDGE_MATCH;
   load_digit_font();
   if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
   if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {

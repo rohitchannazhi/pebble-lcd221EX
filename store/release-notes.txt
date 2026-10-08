@@ -16,3 +16,5 @@ Fixed: with a font, the day of the month matches the weekday's size and both are
 Changed: single-digit days and months always have a leading zero (05, 06-05); the Single-digit dates setting is gone.
 Fixed: with the Wide digits, the indicator labels (BT, DST...) are legible: they use Oxanium's letters.
 New: Min / max marks: tall arrows (new default), triangles (bigger than before) or LO / HI; below zero the minus goes before the number.
+New: Window edge style: match the dividers, center tab, notched, circuit or double line.
+Fixed: the custom LCD window edge colour now colours the styled edges too, not only the plain solid one.
