@@ -18,3 +18,4 @@ Fixed: with the Wide digits, the indicator labels (BT, DST...) are legible: they
 New: Min / max marks: tall arrows (new default), triangles (bigger than before) or LO / HI; below zero the minus goes before the number.
 New: Window edge style: match the dividers, center tab, notched, circuit or double line.
 Fixed: the custom LCD window edge colour now colours the styled edges too, not only the plain solid one.
+New: a live preview at the top of the settings page shows the face with your changes before you Save.

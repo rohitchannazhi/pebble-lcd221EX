@@ -7,7 +7,8 @@
 var Clay = require('pebble-clay');
 var clayConfig = require('./config');
 var customClay = require('./custom-clay');
-var clay = new Clay(clayConfig, customClay);
+// The live preview on the settings page runs the face's own code (see tools/preview).
+var clay = new Clay(clayConfig, customClay, { userData: { preview: require('./preview-data') } });
 
 var lastFetch = 0;                 // last attempt in this run of the phone-side code
 var MIN_FETCH_MS = 5 * 60 * 1000;  // never fetch more often than this (a fix and a web request cost battery)

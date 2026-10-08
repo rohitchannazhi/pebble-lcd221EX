@@ -38,6 +38,12 @@ Notes:
 Open the watch face's settings in the Pebble app. Nothing reaches the watch until you tap **Save**.
 **Reset to defaults** (at the top of the page; tap it twice, so a stray tap does nothing) puts every option back to the value below (then tap Save).
 
+A **live preview** stays at the top of the page and redraws the face with the settings as they are
+now, before Save (tap it to shrink it). It runs the watch face's own drawing code, so it matches
+the watch, except that the system-font text (the top bar, the bottom bezel and the 7-segment
+indicator labels) uses the phone's bold font in place of Pebble's Gothic, and the battery, steps,
+heart rate and weather are sample values.
+
 | Group | Option | Choices (default first) |
 |---|---|---|
 | Time & date | Time format | **Follow watch** (its 12/24-hour setting), 24-hour, 12-hour |
@@ -202,7 +208,7 @@ position in all three), the key to `messageKeys` in `package.json` (then `pebble
 line to the "Custom colors" section of `config.js`, and use `s_col[COL_...]` where it is drawn. Each colour
 costs 11 bytes in the settings message; the inbox is 1024 bytes (`app_message_open` in `init()`).
 
-**Adding a setting** (all five steps are needed):
+**Adding a setting** (all six steps are needed):
 
 1. Add the item to `src/pkjs/config.js` with a `messageKey` and a `defaultValue`.
 2. Add the same key to `messageKeys` in `package.json`, then run `pebble clean` (the key
@@ -214,6 +220,16 @@ costs 11 bytes in the settings message; the inbox is 1024 bytes (`app_message_op
 4. Increase `SETTINGS_KEY`. Saved settings from the old layout are then ignored (everyone's settings
    reset once), which is safer than misreading them. The same goes for `WEATHER_KEY` and `Weather`.
 5. Use the value where it is drawn or acted on.
+6. Run `tools/preview/build.sh` (below) so the settings page's preview knows it too.
+
+**Live preview:** `src/pkjs/preview-data.js` is generated: `main.c` built as WebAssembly, with
+`tools/preview/preview.c` standing in for the Pebble SDK, plus the digit fonts. The settings page
+(`custom-clay.js`) runs it. After changing `main.c` or the fonts, rebuild it and commit the result
+(CloudPebble only bundles the file):
+
+```sh
+tools/preview/build.sh     # needs: clang with the wasm32 target, wasm-ld, node
+```
 
 **Thumbnail:** the Pebble app's watchface list shows the app's menu icon (`menuIcon` in
 `package.json`), including for sideloaded apps. Without one the entry has a blank thumbnail.
