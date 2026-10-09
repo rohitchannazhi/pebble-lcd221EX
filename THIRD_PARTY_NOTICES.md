@@ -13,7 +13,7 @@ font by **Jan Bobrowski** ("~jb"), <https://torinak.com/font/7-segment>, version
   font, it stays under the same licence. The outlines are not sold on their own.
 - The font file carries no copyright line or Reserved Font Name.
 
-## Saira, Handjet, Iceberg, Big Shoulders Stencil and Oxanium (digit style fonts)
+## Saira, Handjet, Iceberg, Big Shoulders Stencil, Chakra Petch and Oxanium (pre-rendered fonts)
 
 The "Digit style" fonts are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
 `resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
@@ -28,6 +28,8 @@ The font files themselves are not included.
   under the reserved name. Its degree mark is Saira's.
 - **Big Shoulders Stencil**: Copyright 2019 The Big Shoulders Project Authors
   (https://github.com/xotypeco/big_shoulders).
+- **Chakra Petch** (SemiBold): Copyright 2018 The Chakra Petch Project Authors
+  (https://github.com/m4rc1e/Chakra-Petch.git). The top and bottom bezels' text (`bezel.bin`).
 - **Oxanium**: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium).
   Not a digit style of its own: every style's small indicator labels use its letters, which read
   better at that size than the condensed fonts'.

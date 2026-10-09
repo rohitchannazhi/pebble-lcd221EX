@@ -15,7 +15,7 @@ clang --target=wasm32 -std=c11 -Oz -ffreestanding -nostdlib -fno-builtin -Wall -
   -o "$out/preview.wasm" preview.c
 node -e '
   const fs = require("fs"), b64 = (p) => fs.readFileSync(p).toString("base64");
-  const fonts = ["saira", "handjet", "iceberg", "stencil"].map((n) => b64("../../resources/fonts/" + n + ".bin"));
+  const fonts = ["saira", "handjet", "iceberg", "stencil", "bezel"].map((n) => b64("../../resources/fonts/" + n + ".bin"));
   fs.writeFileSync("../../src/pkjs/preview-data.js",
     "// Made by tools/preview/build.sh: do not edit. The watch face code as WebAssembly, and the\n" +
     "// digit fonts (in RESOURCE_ID order), for the live preview on the settings page.\n" +

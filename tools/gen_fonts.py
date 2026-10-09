@@ -10,10 +10,11 @@ size is fixed by its widest possible text, so it never changes with the value sh
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
     sairaextracondensed/SairaExtraCondensed-Bold.ttf, handjet/Handjet[ELGR,ELSH,wght].ttf,
     iceberg/Iceberg-Regular.ttf, bigshouldersstencil/BigShouldersStencil[opsz,wght].ttf,
-    and oxanium/Oxanium[wght].ttf, which only lends its letters (see LABEL_FONT).
-Usage (needs Pillow; give all five, as they borrow from each other):
+    and oxanium/Oxanium[wght].ttf, which only lends its letters (see LABEL_FONT);
+    chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text (bezel.bin, see BEZEL_GROUPS).
+Usage (needs Pillow; give all six, as they borrow from each other):
     python3 tools/gen_fonts.py SairaExtraCondensed-Bold.ttf Handjet*.ttf Iceberg-Regular.ttf \
-        BigShouldersStencil*.ttf Oxanium*.ttf
+        BigShouldersStencil*.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf
 
 File format (all offsets absolute, little-endian):
     "LF" 1 <groups>, then per group: H, count, table offset (2 bytes);
@@ -52,6 +53,7 @@ FONTS = {
     "iceberg": ("iceberg", None),
     "stencil": ("bigshouldersstencil", {"Weight": 800}),
     "oxanium": ("oxanium", {"Weight": 700}),  # only lends its letters, below
+    "chakrapetch": ("chakrapetch", None),      # the bezels' font
 }
 OUTPUT = ["saira", "handjet", "iceberg", "stencil"]  # in RESOURCE_ID order (package.json)
 # The small indicator labels: condensed letters are hard to read at 10 px, so they all come
@@ -60,6 +62,13 @@ LABEL_FONT = {name: "oxanium" for name in OUTPUT}
 # Characters taken from another font: Iceberg's degree mark sits above its digits, where the
 # glyphs are cut off.
 CHAR_FONT = {"iceberg": {"\u00b0": "saira"}}
+# bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 and 16 px tall,
+# with every character an upper-cased custom text may use (anything else falls back to the
+# system font). Its glyphs also reach below the baseline (commas, brackets).
+BEZEL_FONT = "chakrapetch"
+BEZEL_CHARS = "".join(chr(c) for c in range(0x20, 0x60))
+# (The third size is for texts too long for the top bezel's 13 px.)
+BEZEL_GROUPS = [("top", BEZEL_CHARS, "H", 13), ("bottom", BEZEL_CHARS, "H", 16), ("small", BEZEL_CHARS, "H", 11)]
 
 
 def load(path, size, axes):
@@ -72,7 +81,7 @@ def load(path, size, axes):
     return font
 
 
-def render_group(path, axes, chars, ref, height, fits):
+def render_group(path, axes, chars, ref, height, fits, below=False):
     # Size: the reference glyph `height` px tall, then smaller while a sample is too wide.
     probe = load(path, 1000, axes)
     ref_h = probe.getbbox(ref, anchor="ls")
@@ -88,11 +97,14 @@ def render_group(path, axes, chars, ref, height, fits):
             font = load(path, round(size), axes)
     top = -font.getbbox(ref, anchor="ls")[1]          # reference top, above the baseline
     h = round(top / SUPER)
+    # Rows below the baseline (`below`: as many as the deepest character needs), then the height.
+    d = -(-max(font.getbbox(ch, anchor="ls")[3] for ch in chars) // SUPER) if below else 0
+    h_all = h + max(d, 0)
     glyphs = []
     for ch in chars:
         adv = font.getlength(ch)
         pad = SUPER * 8
-        img = Image.new("L", (int(adv) + 2 * pad, h * SUPER), 0)
+        img = Image.new("L", (int(adv) + 2 * pad, h_all * SUPER), 0)
         ImageDraw.Draw(img).text((pad, h * SUPER), ch, font=font, fill=255, anchor="ls")
         if ch == ":" and height == 70:
             # A clock's colon is centred on the digits, not sitting on the baseline.
@@ -106,18 +118,18 @@ def render_group(path, axes, chars, ref, height, fits):
         box = img.getbbox() or (pad, 0, pad + 1, 1)
         x0 = box[0] - box[0] % SUPER
         x1 = box[2] + (-box[2]) % SUPER
-        small = img.crop((x0, 0, x1, h * SUPER)).reduce(SUPER)  # box-average down-sampling
+        small = img.crop((x0, 0, x1, h_all * SUPER)).reduce(SUPER)  # box-average down-sampling
         w = small.width
         levels = [min(3, (v + 42) // 85) for v in small.tobytes()]
         rows = []
-        for y in range(h):
+        for y in range(h_all):
             row = bytearray((w * 2 + 7) // 8)
             for x in range(w):
                 row[x >> 2] |= levels[y * w + x] << (6 - 2 * (x & 3))
             rows.append(bytes(row))
         lsb = round((x0 - pad * sx) / SUPER)
         glyphs.append((ch, w, round(adv * sx / SUPER), lsb, b"".join(rows)))
-    return h, glyphs
+    return h_all, glyphs
 
 
 def build(name, paths):
@@ -134,6 +146,17 @@ def build(name, paths):
             bits = glyph[4][(dh - h) * row:] if dh >= h else bytes((h - dh) * row) + glyph[4]
             glyphs = [glyph[:4] + (bits,) if gl[0] == ch else gl for gl in glyphs]
         groups.append((h, glyphs))
+    return pack(groups), [(name, h) for (name, *_), (h, _) in zip(GROUPS, groups)]
+
+
+def build_bezel(paths):
+    groups = [render_group(paths[BEZEL_FONT], FONTS[BEZEL_FONT][1], chars, ref, height,
+                           [("H", 1000)], below=True)
+              for _, chars, ref, height in BEZEL_GROUPS]
+    return pack(groups), [(name, h) for (name, *_), (h, _) in zip(BEZEL_GROUPS, groups)]
+
+
+def pack(groups):
     header = bytearray(b"LF\x01" + bytes([len(groups)]))
     pos = len(header) + 4 * len(groups)
     tables, bitmaps = [], bytearray()
@@ -152,7 +175,7 @@ def build(name, paths):
         tables.append(table)
     blob = bytes(header) + b"".join(tables) + bytes(bitmaps)
     assert len(blob) < 65536, len(blob)
-    return blob, [(name, h) for (name, *_), (h, _) in zip(GROUPS, groups)]
+    return blob
 
 
 def main():
@@ -166,6 +189,9 @@ def main():
         blob, sizes = build(name, paths)
         (out / f"{name}.bin").write_bytes(blob)
         print(f"{name}.bin: {len(blob)} bytes, heights {sizes}")
+    blob, sizes = build_bezel(paths)
+    (out / "bezel.bin").write_bytes(blob)
+    print(f"bezel.bin: {len(blob)} bytes, heights (with the rows below the baseline) {sizes}")
 
 
 if __name__ == "__main__":

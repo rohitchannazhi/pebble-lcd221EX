@@ -410,22 +410,27 @@ static bool font_active(void) { return s_font != NULL; }
 
 static int le16(const uint8_t *p) { return p[0] | p[1] << 8; }
 
-static int font_height(FontGroup g) { return s_font[4 + 4 * g]; }
+// A font file's glyph height in group `g`.
+static int group_height(const uint8_t *f, int g) { return f[4 + 4 * g]; }
 
 // A glyph's table entry: char, width, advance, left bearing (signed), bitmap offset (2 bytes).
-static const uint8_t *font_glyph(FontGroup g, char ch) {
-  const int count = s_font[4 + 4 * g + 1];
-  const uint8_t *table = s_font + le16(s_font + 4 + 4 * g + 2);
+static const uint8_t *find_glyph(const uint8_t *f, int g, char ch) {
+  const int count = f[4 + 4 * g + 1];
+  const uint8_t *table = f + le16(f + 4 + 4 * g + 2);
   for (int i = 0; i < count; i++) {
     if (table[6 * i] == (uint8_t)ch) return table + 6 * i;
   }
   return NULL;
 }
 
-// Checks a font file before it is used: its header, and that every table and bitmap is inside it.
-static bool font_valid(const uint8_t *f, size_t size) {
-  if (size < 4 + 4 * FG_COUNT || f[0] != 'L' || f[1] != 'F' || f[2] != 1 || f[3] != FG_COUNT) return false;
-  for (int g = 0; g < FG_COUNT; g++) {
+static int font_height(FontGroup g) { return group_height(s_font, g); }
+static const uint8_t *font_glyph(FontGroup g, char ch) { return find_glyph(s_font, g, ch); }
+
+// Checks a font file before it is used: its header (`groups` groups), and that every table and
+// bitmap is inside it.
+static bool font_valid(const uint8_t *f, size_t size, int groups) {
+  if (size < 4 + 4 * (size_t)groups || f[0] != 'L' || f[1] != 'F' || f[2] != 1 || f[3] != groups) return false;
+  for (int g = 0; g < groups; g++) {
     const size_t h = f[4 + 4 * g], count = f[4 + 4 * g + 1], table = le16(f + 4 + 4 * g + 2);
     if (table + 6 * count > size) return false;
     for (size_t i = 0; i < count; i++) {
@@ -434,6 +439,19 @@ static bool font_valid(const uint8_t *f, size_t size) {
     }
   }
   return true;
+}
+
+// A font file from the resources, in memory, or NULL if it can't be loaded.
+static uint8_t *load_font(uint32_t id, int groups) {
+  ResHandle handle = resource_get_handle(id);
+  const size_t size = resource_size(handle);
+  uint8_t *buf = malloc(size);
+  if (!buf) return NULL;
+  if (resource_load(handle, buf, size) != size || !font_valid(buf, size, groups)) {
+    free(buf);
+    return NULL;
+  }
+  return buf;
 }
 
 // Loads the font of the chosen digit style (only that one is in memory), or none for the
@@ -451,24 +469,17 @@ static void load_digit_font(void) {
     case DIGITS_STENCIL: id = RESOURCE_ID_FONT_STENCIL; break;
     default: return;
   }
-  ResHandle handle = resource_get_handle(id);
-  const size_t size = resource_size(handle);
-  uint8_t *buf = malloc(size);
-  if (!buf) return;
-  if (resource_load(handle, buf, size) != size || !font_valid(buf, size)) {
-    free(buf);
-    return;
-  }
-  s_font = buf;
+  s_font = load_font(id, FG_COUNT);
 }
 
-// Copies a glyph with its top-left corner at (x, y). Coverage 3 is the ink and 1-2 are shades
-// between the ink and the LCD colour, like the anti-aliased segments. With `density` below
-// DENSITY_FULL only the solid part is drawn, as dots (inactive indicator labels).
-static void draw_glyph(FontGroup g, const uint8_t *e, int x, int y, GColor ink, int density) {
-  const int w = e[1], h = font_height(g), stride = (w * 2 + 7) / 8;
-  const uint8_t *bits = s_font + le16(e + 4);
-  const uint8_t shade[4] = { 0, mix_color(ink, s_lcd, 1).argb, mix_color(ink, s_lcd, 2).argb, ink.argb };
+// Copies a glyph of font `f` with its top-left corner at (x, y). Coverage 3 is the ink and 1-2
+// are shades between the ink and the background `bg`. With `density` below DENSITY_FULL only the
+// solid part is drawn, as dots (inactive indicator labels).
+static void blit_glyph(const uint8_t *f, int g, const uint8_t *e, int x, int y, GColor ink, GColor bg,
+                       int density) {
+  const int w = e[1], h = group_height(f, g), stride = (w * 2 + 7) / 8;
+  const uint8_t *bits = f + le16(e + 4);
+  const uint8_t shade[4] = { 0, mix_color(ink, bg, 1).argb, mix_color(ink, bg, 2).argb, ink.argb };
   for (int r = 0; r < h; r++) {
     const int yy = y + r;
     if (yy < 0 || yy >= PBL_DISPLAY_HEIGHT) continue;
@@ -482,6 +493,11 @@ static void draw_glyph(FontGroup g, const uint8_t *e, int x, int y, GColor ink, 
       else if (level >= 2 && BAYER4[yy & 3][xx & 3] < density) row.data[xx] = ink.argb;
     }
   }
+}
+
+// A digit-style glyph on the LCD.
+static void draw_glyph(FontGroup g, const uint8_t *e, int x, int y, GColor ink, int density) {
+  blit_glyph(s_font, g, e, x, y, ink, s_lcd, density);
 }
 
 // The width of a text (the sum of its advances); a space is as wide as a '0' (a blank digit).
@@ -514,6 +530,38 @@ static void font_draw_text(FontGroup g, const char *text, int x, int w, int base
 static void font_draw_centered(FontGroup g, char ch, int cx, int baseline, GColor ink) {
   const uint8_t *e = font_glyph(g, ch);
   if (e) draw_glyph(g, e, cx - e[1] / 2, baseline - font_height(g), ink, DENSITY_FULL);
+}
+
+// The bezels' font (Chakra Petch, pre-rendered by tools/gen_fonts.py into bezel.bin): every
+// character an upper-cased custom text may use, with capitals 13 px tall in the top bezel and
+// 16 px in the bottom one, and 11 px for top-bezel texts too long for 13 (a bottom-bezel one
+// goes down to 13). A glyph's bitmap starts at the top of the capitals and reaches below the
+// baseline. A text with any other character (an emoji, an accent) uses the system font.
+typedef enum { BG_TOP, BG_BOTTOM, BG_SMALL, BG_COUNT } BezelGroup;
+static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 16, 11 };
+static uint8_t *s_bezel_font;  // NULL if it couldn't be loaded: the system font is used instead
+
+static bool bezel_font_has(BezelGroup g, const char *text) {
+  if (!s_bezel_font) return false;
+  for (const char *p = text; *p; p++) {
+    if (!find_glyph(s_bezel_font, g, *p)) return false;
+  }
+  return true;
+}
+
+static int bezel_text_width(BezelGroup g, const char *text) {
+  int w = 0;
+  for (const char *p = text; *p; p++) w += find_glyph(s_bezel_font, g, *p)[2];
+  return w;
+}
+
+// Draws a text with the top of its capitals at `cap_top`, on the case colour.
+static void bezel_draw_text(BezelGroup g, const char *text, int x, int cap_top, GColor ink) {
+  for (const char *p = text; *p; p++) {
+    const uint8_t *e = find_glyph(s_bezel_font, g, *p);
+    blit_glyph(s_bezel_font, g, e, x + (int8_t)e[3], cap_top, ink, s_col[COL_CASE], DENSITY_FULL);
+    x += e[2];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -642,9 +690,11 @@ static void apply_backlight(void) {
 #define TEMP_D2_X 166
 #define TEMP_DEG_X 188
 
-// Bezels.
+// Bezels: the top of the bezel font's capitals at its full size in each bezel, where the icons
+// line up.
+#define TOP_CAP_Y 4        // 13 px capitals
+#define BOTTOM_CAP_Y 207   // 16 px capitals
 #define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
-#define BOTTOM_CAP 208     // top of the bottom bezel's 14px capitals (centred in the bezel)
 
 static const char *const DAYS[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 
@@ -654,15 +704,65 @@ static void draw_text(GContext *ctx, const char *text, GRect box, GTextAlignment
                      GTextOverflowModeTrailingEllipsis, align, NULL);
 }
 
-// Printed bezel text: larger (Gothic 24 bold) for readability. `y` is the top
-// of the capitals; the font draws them BEZEL_CAP_OFFSET below the box top.
-#define BEZEL_CAP_OFFSET 10
-static void draw_bezel_text(GContext *ctx, const char *text, int x, int y, int w,
+// A bezel text is drawn in the bezel font when it has all the text's characters, at the size its
+// bezel chose (see draw_top_bezel and draw_bottom_bezel), cut with "..." if it still doesn't fit
+// its box. Otherwise it is drawn in the system font (Gothic 18 bold on top, 24 bold below, as
+// before the bezel font), which cuts it the same way.
+typedef enum { BAR_TOP, BAR_BOTTOM } Bezel;
+
+static GFont bezel_system_font(Bezel bar) {
+  return fonts_get_system_font(bar == BAR_TOP ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_24_BOLD);
+}
+
+// Whether a text fits `w` px at size `g` (a system-font text always counts: it is cut anyway).
+static bool bezel_fits(BezelGroup g, const char *text, int w) {
+  return !bezel_font_has(g, text) || bezel_text_width(g, text) <= w;
+}
+
+// The width a bezel text takes (at most `w`), in whichever font it is drawn in.
+static int bezel_width(Bezel bar, BezelGroup g, const char *text, int w) {
+  if (bezel_font_has(g, text)) {
+    const int tw = bezel_text_width(g, text);
+    return tw < w ? tw : w;
+  }
+  return graphics_text_layout_get_content_size(text, bezel_system_font(bar), GRect(0, 0, w, 30),
+                                               GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w;
+}
+
+// A bezel text in the box x..x+w-1, centred in its bezel's height.
+static void draw_bezel_text(GContext *ctx, Bezel bar, BezelGroup g, const char *text, int x, int w,
                             GTextAlignment align, GColor color) {
+  if (bezel_font_has(g, text)) {
+    char cut[32];
+    if (bezel_text_width(g, text) > w) {  // as many characters as fit before "..."
+      const int dots = bezel_text_width(g, "...");
+      size_t n = 0;
+      int tw = 0;
+      while (text[n] && n + 4 < sizeof(cut)) {
+        const int adv = find_glyph(s_bezel_font, g, text[n])[2];
+        if (tw + adv + dots > w) break;
+        tw += adv;
+        n++;
+      }
+      while (n > 0 && text[n - 1] == ' ') n--;  // no space before the dots
+      memcpy(cut, text, n);
+      memcpy(cut + n, "...", 4);
+      text = cut;
+    }
+    const int tw = bezel_text_width(g, text);
+    x += align == GTextAlignmentRight ? w - tw : align == GTextAlignmentCenter ? (w - tw) / 2 : 0;
+    // Rows 0-21 above the LCD, 202-227 below it.
+    const int cap_y = bar == BAR_TOP ? (22 - BEZEL_CAP[g]) / 2 : 202 + (26 - BEZEL_CAP[g]) / 2;
+    if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+    bezel_draw_text(g, text, x, cap_y, color);
+    graphics_release_frame_buffer(ctx, s_fb);
+    s_fb = NULL;
+    return;
+  }
+  // The system font's capitals start 7 (Gothic 18) or 10 (Gothic 24) px below the box top.
+  const GRect box = bar == BAR_TOP ? GRect(x, -2, w, 22) : GRect(x, 198, w, 30);
   graphics_context_set_text_color(ctx, color);
-  graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(x, y - BEZEL_CAP_OFFSET, w, 30),
-                     GTextOverflowModeTrailingEllipsis, align, NULL);
+  graphics_draw_text(ctx, text, bezel_system_font(bar), box, GTextOverflowModeTrailingEllipsis, align, NULL);
 }
 
 // Draws a label so it fits its indicator-box cell. The text is drawn in the
@@ -1104,11 +1204,16 @@ static void draw_rules(void) {
       fill(xd, y0, 1, yb - y0 + 1, c, false);
       for (int y = y0 + 8; y < yb; y += 8) fill(xd + 1, y, 2, 1, c, false);
       break;
-    case LINES_BRACKETS:  // no lines: the two boxes' corners beside the divider (the LCD's own
-                          // corners, drawn with its edges, frame the outer side)
-      draw_brackets(2, xd - 3, y0 + 1, yb - 1, CORNER_TR | CORNER_BR, 8, 1, c);
-      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, CORNER_TL | CORNER_BL, 8, 1, c);
+    case LINES_BRACKETS: {  // no lines: each box's four corners, except the two at the bottom
+                            // outer ends while the LCD's own corner brackets are there (the
+                            // matching window edge), 2 px below them
+      const int outer_bottom = s_settings.edge_style == EDGE_MATCH ? 0 : CORNER_BL | CORNER_BR;
+      draw_brackets(2, xd - 3, y0 + 1, yb - 1, (CORNER_TL | CORNER_TR | CORNER_BR) | (outer_bottom & CORNER_BL),
+                    8, 1, c);
+      draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, (CORNER_TL | CORNER_TR | CORNER_BL) | (outer_bottom & CORNER_BR),
+                    8, 1, c);
       break;
+    }
     case LINES_HUD: {  // the line splits into two 45-degree arms that meet the divider, with angled tips
       const int arm = 12;
       fill(6, y0, xd - arm - 6 + 1, 2, c, false);
@@ -1255,7 +1360,7 @@ static void draw_battery_icon(GContext *ctx, int x, int y, GColor ink) {
   if (s_battery.is_charging) draw_icon(ctx, x + 7, y + 2, BOLT, 5, fill > 6 ? s_col[COL_CASE] : ink);
 }
 
-// Top bezel (Gothic 18 bold): a battery icon and the level, and a walking figure and the step
+// Top bezel: a battery icon and the level, and a walking figure and the step
 // count; or the custom texts when those are switched off. The right text takes the width it
 // needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
 static void draw_top_bezel(GContext *ctx) {
@@ -1279,37 +1384,39 @@ static void draw_top_bezel(GContext *ctx) {
   } else {
     snprintf(right, sizeof(right), "--");
   }
-  int right_w = graphics_text_layout_get_content_size(
-      right, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0, 0, 190, 22),
-      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight).w + 4;
-  if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
-  draw_text(ctx, right, GRect(190 - right_w, -2, right_w, 22), GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
-  int right_start = 190 - right_w;
+  // Both texts 13 px tall, or both 11 px when the left one doesn't fit beside the right one.
+  const int left_x = 10 + (s_settings.show_battery ? BATTERY_W + ICON_GAP : 0);
+  BezelGroup g = BG_TOP;
+  int right_w, right_start;
+  for (;;) {
+    right_w = bezel_width(BAR_TOP, g, right, TOP_RIGHT_MAX - 4) + 4;
+    if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
+    right_start = 190 - right_w - (s_settings.show_steps ? WALKER_W + ICON_GAP : 0);
+    if (g == BG_SMALL || bezel_fits(g, left, right_start - left_x - 4)) break;
+    g = BG_SMALL;
+  }
+  draw_bezel_text(ctx, BAR_TOP, g, right, 190 - right_w, right_w, GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
   if (s_settings.show_steps) {  // the figure just left of the number
-    right_start -= WALKER_W + ICON_GAP;
-    draw_icon(ctx, right_start + 4, 5, WALKER, ARRAY_LENGTH(WALKER), s_col[COL_TOP_RIGHT]);
+    draw_icon(ctx, right_start + 4, TOP_CAP_Y + 1, WALKER, ARRAY_LENGTH(WALKER), s_col[COL_TOP_RIGHT]);
   }
-  int left_x = 10;
-  if (s_settings.show_battery) {
-    draw_battery_icon(ctx, left_x, 6, s_col[COL_TOP_LEFT]);
-    left_x += BATTERY_W + ICON_GAP;
-  }
-  draw_text(ctx, left, GRect(left_x, -2, right_start - left_x - 4, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  if (s_settings.show_battery) draw_battery_icon(ctx, 10, TOP_CAP_Y + 1, s_col[COL_TOP_LEFT]);
+  draw_bezel_text(ctx, BAR_TOP, g, left, left_x, right_start - left_x - 4, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
-// Bottom bezel (larger text): a heart and the latest heart rate, and the custom label.
+// Bottom bezel: a heart and the latest heart rate, and the custom label.
 static void draw_bottom_bezel(GContext *ctx) {
   static const char *const HEART[] = {
     "..###...###..", ".#####.#####.", "#############", "#############", "#############",
     ".###########.", "..#########..", "...#######...", "....#####....", ".....###.....", "......#......",
   };
-  draw_icon(ctx, 12, BOTTOM_CAP + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
+  draw_icon(ctx, 12, BOTTOM_CAP_Y + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
   char hr_text[12];
   if (s_hr > 0) snprintf(hr_text, sizeof(hr_text), "%d", s_hr);
   else snprintf(hr_text, sizeof(hr_text), "--");
-  draw_bezel_text(ctx, hr_text, 30, BOTTOM_CAP, 50, GTextAlignmentLeft, s_col[COL_HEART]);
-  draw_bezel_text(ctx, s_settings.bezel_label, 82, BOTTOM_CAP, 108, GTextAlignmentRight,
-                  s_col[COL_LABEL]);
+  // Both texts 16 px tall, or both 13 px when the label doesn't fit at 16.
+  const BezelGroup g = bezel_fits(BG_BOTTOM, s_settings.bezel_label, 120) ? BG_BOTTOM : BG_TOP;
+  draw_bezel_text(ctx, BAR_BOTTOM, g, hr_text, 30, 40, GTextAlignmentLeft, s_col[COL_HEART]);
+  draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
 }
 
 // One indicator: its label, whether it is on, and its colour when on.
@@ -1810,6 +1917,7 @@ static void init(void) {
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_PILLS;
   if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   load_digit_font();
+  s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
   if (s_weather.has_range > 1) s_weather.has_range = 0;
   s_colors.enabled = 0;
@@ -1854,6 +1962,7 @@ static void deinit(void) {
 #endif
   window_destroy(s_window);
   if (s_font) free(s_font);
+  if (s_bezel_font) free(s_bezel_font);
 }
 
 int main(void) {

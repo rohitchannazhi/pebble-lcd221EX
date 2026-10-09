@@ -80,7 +80,8 @@
         { "type": "raw", "name": "FONT_SAIRA", "file": "fonts/saira.bin" },
         { "type": "raw", "name": "FONT_HANDJET", "file": "fonts/handjet.bin" },
         { "type": "raw", "name": "FONT_ICEBERG", "file": "fonts/iceberg.bin" },
-        { "type": "raw", "name": "FONT_STENCIL", "file": "fonts/stencil.bin" }
+        { "type": "raw", "name": "FONT_STENCIL", "file": "fonts/stencil.bin" },
+        { "type": "raw", "name": "FONT_BEZEL", "file": "fonts/bezel.bin" }
       ]
     }
   }

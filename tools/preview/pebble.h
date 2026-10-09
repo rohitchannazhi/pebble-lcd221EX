@@ -105,6 +105,7 @@ size_t resource_load(ResHandle, uint8_t *, size_t);
 #define RESOURCE_ID_FONT_HANDJET 2
 #define RESOURCE_ID_FONT_ICEBERG 3
 #define RESOURCE_ID_FONT_STENCIL 4
+#define RESOURCE_ID_FONT_BEZEL 5
 void graphics_draw_rect(GContext*, GRect);
 
 // The message keys (keys.h is made by build.sh from the names main.c uses).

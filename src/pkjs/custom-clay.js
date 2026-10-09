@@ -46,7 +46,7 @@ module.exports = function () {
     // The watch face's own drawing code runs here, built as WebAssembly (tools/preview/build.sh,
     // handed over by index.js). It gets the settings the way the watch does on Save and draws a
     // frame; the page shows it, redrawn on every change and every second. Only the system-font
-    // text (top bar, bottom bezel, 7-segment indicator labels) is the phone's bold font, close to
+    // text (7-segment indicator labels, bezel texts the bezel font can't draw) is the phone's bold font, close to
     // the watch's. The battery, steps, heart rate and weather are sample values.
     (function () {
       var data = clayConfig.meta.userData && clayConfig.meta.userData.preview;

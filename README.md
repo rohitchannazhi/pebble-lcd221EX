@@ -40,8 +40,8 @@ Open the watch face's settings in the Pebble app. Nothing reaches the watch unti
 
 A **live preview** stays at the top of the page and redraws the face with the settings as they are
 now, before Save (tap it to shrink it). It runs the watch face's own drawing code, so it matches
-the watch, except that the system-font text (the top bar, the bottom bezel and the 7-segment
-indicator labels) uses the phone's bold font in place of Pebble's Gothic, and the battery, steps,
+the watch, except that the system-font text (the 7-segment indicator labels, and bezel texts with
+characters the bezel font lacks) uses the phone's bold font in place of Pebble's Gothic, and the battery, steps,
 heart rate and weather are sample values.
 
 | Group | Option | Choices (default first) |
@@ -76,7 +76,8 @@ heart rate and weather are sample values.
 Custom colors: the watch has 64 colors (four levels per channel), so a picked color is rounded to the nearest one. Unlit segments and dots are drawn as a sparse dither of their color (sparser on a dark LCD), so they look paler than the swatch: pick a stronger color for a stronger ghost. The fonts' anti-aliased edges are blended between each text's color and the LCD background, so they stay smooth with any combination. A digit or label with the same color as the LCD background is simply invisible.
 
 There is no vibration during Quiet Time. When the two top-bezel texts are both long, the right
-text takes the width it needs and the left one is cut with "..." to fit.
+text takes the width it needs and the left one gets the rest: both drop to the smaller size if
+the left one doesn't fit, and it is cut with "..." if it still doesn't.
 
 ## Building and installing
 
@@ -96,7 +97,7 @@ pebble build          # produces build/<folder name>.pbw
 ```
 
 The digit-style fonts in `resources/fonts/*.bin` are pre-rendered and committed; only to change
-them, re-run `tools/gen_fonts.py` with the five font files it lists (needs Pillow; where to get
+them, re-run `tools/gen_fonts.py` with the six font files it lists (needs Pillow; where to get
 the fonts is in the script), then `tools/preview/build.sh`.
 
 Run it in the emulator, and take a screenshot:
@@ -170,7 +171,12 @@ vibrations, the backlight colours, live heart rate, and every control on the set
 - With the 7-segment digits, the indicator labels are drawn with the system font and then squashed in
   the framebuffer to 10 pixels tall, one letter at a time (the row dropped is from inside each letter,
   never from a horizontal bar, so every bar keeps the same thickness).
-- The weekday is a 5x5 dot matrix, like the original. The bezel text uses the system fonts.
+- The weekday is a 5x5 dot matrix, like the original.
+- The bezel text is Chakra Petch, pre-rendered like the digit fonts (`resources/fonts/bezel.bin`):
+  capitals 13 px tall in the top bezel and 16 px in the bottom one. When a bezel's texts don't fit
+  at that size, both of them drop to the next size (11 px on top, 13 px below), then are cut with
+  "...". A text with a character the font lacks (an emoji, an accented letter) uses the system
+  font (Gothic) instead.
 - Colours come from one place, `apply_theme()`, which fills `s_col[]` with one colour per component
   (`ColorId`: `COL_CASE`, `COL_HOURS`, `COL_BT`, ...). Without custom colours that is the normal (black on
   white) or inverted (white on black) theme, with the case black or silver. With "Use custom colors" it is

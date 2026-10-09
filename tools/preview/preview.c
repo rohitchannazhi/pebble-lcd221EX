@@ -3,8 +3,8 @@
 //
 // The page hands the current (unsaved) settings to main.c's own inbox handler, exactly as the
 // watch receives them on Save, then main.c draws a frame into FB. Only the system font (the
-// top bar, the bottom bezel and the 7-segment style's indicator labels) is drawn by the page,
-// with the phone's own bold font in place of Pebble's Gothic. Sensor values are made up.
+// 7-segment style's indicator labels, and bezel texts the bezel font can't draw) is drawn by the
+// page, with the phone's own bold font in place of Pebble's Gothic. Sensor values are made up.
 #include "pebble.h"
 #define main watch_main
 #include "../../src/c/main.c"
