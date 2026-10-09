@@ -173,9 +173,10 @@ module.exports = [
         "description": "7-segment is the LCD look, with faint unlit segments. The fonts are used for every text and number on the LCD (not the top and bottom bars).",
         "options": [
           { "label": "7-segment", "value": "segment" },
-          { "label": "Oxanium", "value": "oxanium" },
-          { "label": "Chakra Petch", "value": "chakra" },
-          { "label": "Wide (based on Orbitron)", "value": "orbitron" }
+          { "label": "Condensed (based on Saira)", "value": "saira" },
+          { "label": "Handjet", "value": "handjet" },
+          { "label": "Angular (based on Iceberg)", "value": "iceberg" },
+          { "label": "Big Shoulders Stencil", "value": "stencil" }
         ]
       },
       {

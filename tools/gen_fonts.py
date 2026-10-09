@@ -8,9 +8,12 @@ of the reference glyph ("8" for digits, "M" for letters) down to the baseline. A
 size is fixed by its widest possible text, so it never changes with the value shown.
 
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
-    oxanium/Oxanium[wght].ttf, chakrapetch/ChakraPetch-Bold.ttf, orbitron/Orbitron[wght].ttf
-Usage (needs Pillow; give all three, as one may borrow another's label letters, see LABEL_FONT):
-    python3 tools/gen_fonts.py Oxanium.ttf ChakraPetch-Bold.ttf Orbitron.ttf
+    sairaextracondensed/SairaExtraCondensed-Bold.ttf, handjet/Handjet[ELGR,ELSH,wght].ttf,
+    iceberg/Iceberg-Regular.ttf, bigshouldersstencil/BigShouldersStencil[opsz,wght].ttf,
+    and oxanium/Oxanium[wght].ttf, which only lends its letters (see LABEL_FONT).
+Usage (needs Pillow; give all five, as they borrow from each other):
+    python3 tools/gen_fonts.py SairaExtraCondensed-Bold.ttf Handjet*.ttf Iceberg-Regular.ttf \
+        BigShouldersStencil*.ttf Oxanium*.ttf
 
 File format (all offsets absolute, little-endian):
     "LF" 1 <groups>, then per group: H, count, table offset (2 bytes);
@@ -40,37 +43,49 @@ GROUPS = [
     ("right", DIGITS + "-°", "8", 36, [("88°", 66), ("-88", 66), ("188", 66)]),
     ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
-FONTS = {  # output name -> variable-font weight (None: a static font)
-    "oxanium": 700, "chakrapetch": None, "orbitron": 700,
+# Output name -> (the start of its file's name, its variable-font axis settings, or None).
+# The four digit styles are condensed: their digits fill the 7-segment digits' cells without
+# being squeezed or made smaller.
+FONTS = {
+    "saira": ("sairaextracondensed", None),
+    "handjet": ("handjet", {"Weight": 600}),
+    "iceberg": ("iceberg", None),
+    "stencil": ("bigshouldersstencil", {"Weight": 800}),
+    "oxanium": ("oxanium", {"Weight": 700}),  # only lends its letters, below
 }
-# The small indicator labels of a font whose letters are hard to tell apart at 10 px (Orbitron's
-# D and B read as C and E) come from another one.
-LABEL_FONT = {"orbitron": "oxanium"}
+OUTPUT = ["saira", "handjet", "iceberg", "stencil"]  # in RESOURCE_ID order (package.json)
+# The small indicator labels: condensed letters are hard to read at 10 px, so they all come
+# from Oxanium.
+LABEL_FONT = {name: "oxanium" for name in OUTPUT}
+# Characters taken from another font: Iceberg's degree mark sits above its digits, where the
+# glyphs are cut off.
+CHAR_FONT = {"iceberg": {"\u00b0": "saira"}}
 
 
-def load(path, size, weight):
+def load(path, size, axes):
     font = ImageFont.truetype(str(path), size)
-    if weight is not None:
-        axes = font.get_variation_axes()
-        font.set_variation_by_axes([weight if (a["name"] in (b"Weight", "Weight")) else a["default"]
-                                    for a in axes])
+    if axes:
+        names = [a["name"].decode() if isinstance(a["name"], bytes) else a["name"]
+                 for a in font.get_variation_axes()]
+        font.set_variation_by_axes([axes.get(n, a["default"])
+                                    for n, a in zip(names, font.get_variation_axes())])
     return font
 
 
-def render_group(path, weight, chars, ref, height, fits):
+def render_group(path, axes, chars, ref, height, fits):
     # Size: the reference glyph `height` px tall, then smaller while a sample is too wide.
-    probe = load(path, 1000, weight)
+    probe = load(path, 1000, axes)
     ref_h = probe.getbbox(ref, anchor="ls")
     ref_h = -ref_h[1]  # height above the baseline
     size = 1000 * height * SUPER / ref_h
-    font = load(path, round(size), weight)
+    font = load(path, round(size), axes)
     ratio = max((font.getbbox(t)[2] - font.getbbox(t)[0]) / SUPER / room for t, room in fits)
     sx = 1.0
     if ratio > 1:
         sx = max(1 / ratio, MIN_SQUEEZE)
         if ratio * sx > 1:
             size /= ratio * sx
-            font = load(path, round(size), weight)
+            font = load(path, round(size), axes)
     top = -font.getbbox(ref, anchor="ls")[1]          # reference top, above the baseline
     h = round(top / SUPER)
     glyphs = []
@@ -109,7 +124,16 @@ def build(name, paths):
     groups = []
     for group, chars, ref, height, fits in GROUPS:
         src = LABEL_FONT.get(name, name) if group == "label" else name
-        groups.append(render_group(paths[src], FONTS[src], chars, ref, height, fits))
+        h, glyphs = render_group(paths[src], FONTS[src][1], chars, ref, height, fits)
+        for ch, donor in CHAR_FONT.get(name, {}).items():
+            if ch not in chars:
+                continue
+            dh, dglyphs = render_group(paths[donor], FONTS[donor][1], chars, ref, height, fits)
+            glyph = next(gl for gl in dglyphs if gl[0] == ch)
+            row = (glyph[1] * 2 + 7) // 8
+            bits = glyph[4][(dh - h) * row:] if dh >= h else bytes((h - dh) * row) + glyph[4]
+            glyphs = [glyph[:4] + (bits,) if gl[0] == ch else gl for gl in glyphs]
+        groups.append((h, glyphs))
     header = bytearray(b"LF\x01" + bytes([len(groups)]))
     pos = len(header) + 4 * len(groups)
     tables, bitmaps = [], bytearray()
@@ -136,9 +160,9 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     paths = {}
     for arg in sys.argv[1:]:
-        key = Path(arg).name.lower().split("[")[0].split("-")[0].replace(".ttf", "")
-        paths[next(n for n in FONTS if n.startswith(key[:6]))] = arg
-    for name in paths:
+        key = Path(arg).name.lower()
+        paths[next(n for n, (start, _) in FONTS.items() if key.startswith(start))] = arg
+    for name in OUTPUT:
         blob, sizes = build(name, paths)
         (out / f"{name}.bin").write_bytes(blob)
         print(f"{name}.bin: {len(blob)} bytes, heights {sizes}")

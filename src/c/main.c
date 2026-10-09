@@ -59,7 +59,7 @@ enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 enum { CASE_SOLID = 0, CASE_DOTS = 1, CASE_CHECKER = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
-enum { DIGITS_SEGMENT = 0, DIGITS_OXANIUM = 1, DIGITS_CHAKRA = 2, DIGITS_ORBITRON = 3, DIGITS_COUNT };
+enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG = 3, DIGITS_STENCIL = 4, DIGITS_COUNT };
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
@@ -556,9 +556,10 @@ static void load_digit_font(void) {
   }
   uint32_t id;
   switch (s_settings.digit_style) {
-    case DIGITS_OXANIUM:  id = RESOURCE_ID_FONT_OXANIUM; break;
-    case DIGITS_CHAKRA:   id = RESOURCE_ID_FONT_CHAKRAPETCH; break;
-    case DIGITS_ORBITRON: id = RESOURCE_ID_FONT_ORBITRON; break;
+    case DIGITS_SAIRA:   id = RESOURCE_ID_FONT_SAIRA; break;
+    case DIGITS_HANDJET: id = RESOURCE_ID_FONT_HANDJET; break;
+    case DIGITS_ICEBERG: id = RESOURCE_ID_FONT_ICEBERG; break;
+    case DIGITS_STENCIL: id = RESOURCE_ID_FONT_STENCIL; break;
     default: return;
   }
   ResHandle handle = resource_get_handle(id);
@@ -2091,8 +2092,8 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   bool font_changed = false;
   if ((t = dict_find(iter, MESSAGE_KEY_DigitStyle))) {
     const char *d = t->value->cstring;
-    const uint8_t style = strcmp(d, "oxanium") == 0 ? DIGITS_OXANIUM : strcmp(d, "chakra") == 0 ? DIGITS_CHAKRA
-        : strcmp(d, "orbitron") == 0 ? DIGITS_ORBITRON : DIGITS_SEGMENT;
+    const uint8_t style = strcmp(d, "saira") == 0 ? DIGITS_SAIRA : strcmp(d, "handjet") == 0 ? DIGITS_HANDJET
+        : strcmp(d, "iceberg") == 0 ? DIGITS_ICEBERG : strcmp(d, "stencil") == 0 ? DIGITS_STENCIL : DIGITS_SEGMENT;
     font_changed = style != s_settings.digit_style;
     s_settings.digit_style = style;
     settings_changed = true;

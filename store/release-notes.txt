@@ -2,7 +2,7 @@ New: the date box can show today's high and low temperature instead of the date 
 Changed: the DST indicator moved into the indicator box, in place of SIG.
 Removed: the hourly chime's sounds. "Vibrate on the hour" replaces it (a chime set to vibration only keeps vibrating).
 New: two charcoal case colors, dotted and checkerboard, which set a black (inverted) LCD apart from the case.
-New: Digit style: the 7-segment digits, or one of three fonts (Oxanium, Chakra Petch, Wide) for all the text and numbers on the LCD.
+New: Digit style: the 7-segment digits, or one of four condensed fonts (Condensed, Handjet, Angular, Big Shoulders Stencil) for all the text and numbers on the LCD.
 New: Divider lines: solid, segmented, ruler ticks, corner brackets or HUD chamfer.
 Changed: the top bar shows a battery icon and a walking figure instead of the words BATT and STEPS.
 Fixed: with corner brackets, the bottom row's numbers are centred between the brackets.
@@ -14,7 +14,6 @@ New: Indicators style: grid, pills, active only or icons.
 Changed: the heart rate shows a heart instead of HR; with corner brackets the LCD's corners are bolder, and the ruler-ticks edge is thicker.
 Fixed: with a font, the day of the month matches the weekday's size and both are centred on the indicators; the temperature is centred in its box.
 Changed: single-digit days and months always have a leading zero (05, 06-05); the Single-digit dates setting is gone.
-Fixed: with the Wide digits, the indicator labels (BT, DST...) are legible: they use Oxanium's letters.
 New: Min / max marks: tall arrows (new default), triangles (bigger than before) or LO / HI; below zero the minus goes before the number.
 New: Window edge style: match the dividers, center tab, notched, circuit or double line.
 Fixed: the custom LCD window edge colour now colours the styled edges too, not only the plain solid one.
