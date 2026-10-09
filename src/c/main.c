@@ -42,7 +42,9 @@ enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
-enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG = 3, DIGITS_STENCIL = 4, DIGITS_COUNT };
+// (DIGITS_MATRIX: dot-matrix digits like the weekday's letters, drawn like the 7-segment ones.)
+enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG = 3, DIGITS_STENCIL = 4,
+       DIGITS_MATRIX = 5, DIGITS_COUNT };
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
@@ -317,7 +319,14 @@ static void draw_segments(int x, int y, int w, int h, uint8_t on, uint8_t presen
   }
 }
 
+static void draw_matrix_digit(int x, int y, int w, int h, int value, GColor ink, bool ghosts);
+
+// A digit (or DIGIT_MINUS, or DIGIT_BLANK) in the box, in the 7-segment or dot-matrix style.
 static void draw_digit(int x, int y, int w, int h, int value, GColor ink) {
+  if (s_settings.digit_style == DIGITS_MATRIX) {
+    draw_matrix_digit(x, y, w, h, value, ink, true);
+    return;
+  }
   uint8_t on = (value >= 0 && value <= DIGIT_MINUS) ? DIGIT_SEGS[value] : 0;
   draw_segments(x, y, w, h, on, 0x7F, ink);
 }
@@ -394,6 +403,50 @@ static void draw_matrix(int x, int y, const char *bits, int cols, int rows, int 
 // day of the month after them.
 static void draw_day(int x, int y, const char *text, GColor ink) {
   for (int i = 0; text[i]; i++) draw_matrix(x + i * 22, y, day_glyph(text[i]), 5, 5, 4, 6, 3, 5, ink);
+}
+
+// The "Dot matrix" digit style: 5x7 digits (the classic dot-matrix display's) for the numbers,
+// 5x5 ones beside the weekday, and tiny 3x5 letters for the indicator labels.
+static const char *const MATRIX_DIGITS[] = {  // 0-9, then the minus
+  ".###.#...##...##...##...##...#.###.", "..#...##....#....#....#....#...###.",
+  ".###.#...#....#...#...#...#...#####", "#####...#...#.....#....##...#.###.",
+  "...#...##..#.#.#..#.#####...#....#.", "######....####.....#....##...#.###.",
+  "..##..#...#....####.#...##...#.###.", "#####....#...#...#...#....#....#...",
+  ".###.#...##...#.###.#...##...#.###.", ".###.#...##...#.####....#...#..##..",
+  "...............#####...............",
+};
+static const char *const MATRIX_DIGITS_5X5[] = {
+  ".###.#...##...##...#.###.", "..#...##....#....#...###.", "####.....#.###.#....#####",
+  "####.....#.###.....#####.", "#...##...######....#....#", "######....####.....#####.",
+  ".###.#....####.#...#.###.", "#####....#...#...#...#...", ".###.#...#.###.#...#.###.",
+  ".###.#...#.####....#.###.",
+};
+_Static_assert(sizeof(".###.#...##...##...##...##...#.###.") == 36, "5x7 glyphs are 35 dots");
+
+// A 5x7 digit filling the box (dots about two thirds of their spacing wide, nearly as tall as it);
+// unlit dots as ghosts unless `ghosts` is false.
+static void draw_matrix_digit(int x, int y, int w, int h, int value, GColor ink, bool ghosts) {
+  const char *bits = (value >= 0 && value <= DIGIT_MINUS) ? MATRIX_DIGITS[value] : NULL;
+  const int px = w / 5, py = h / 7, dw = px - (px >= 6 ? 2 : 1), dh = py - (py >= 8 ? 2 : 1);
+  x += (w - (5 * px - (px - dw))) / 2;
+  y += (h - (7 * py - (py - dh))) / 2;
+  if (ghosts) {
+    draw_matrix(x, y, bits, 5, 7, px, py, dw, dh, ink);
+    return;
+  }
+  for (int i = 0; bits && i < 35; i++) {
+    if (bits[i] == '#') fill(x + i % 5 * px, y + i / 5 * py, dw, dh, ink, false);
+  }
+}
+
+// A narrow "1" (3x7) or minus (3 dots) in a sign slot, level with draw_matrix_digit's dots for a
+// box `h` tall, `px` px apart.
+static void draw_matrix_sign(int x, int y, int h, bool one, int px, GColor ink) {
+  static const char ONE[] = ".#.##..#..#..#..#.###";
+  const int py = h / 7, dh = py - (py >= 8 ? 2 : 1);
+  y += (h - (7 * py - (py - dh))) / 2;
+  if (one) draw_matrix(x, y, ONE, 3, 7, px, py, px - 1, dh, ink);
+  else draw_matrix(x, y + 3 * py, "###", 3, 1, px, py, px - 1, dh, ink);
 }
 
 // ---------------------------------------------------------------------------
@@ -952,6 +1005,8 @@ static void draw_time(void) {
   }
   if (is24 || zero12) {
     draw_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS]);
+  } else if (s_settings.digit_style == DIGITS_MATRIX) {  // just the 1, clear of the PM marker
+    draw_matrix_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS], false);
   } else {
     // In 12-hour mode the first digit can only be a 1 (or blank), so it only has
     // the two right-hand segments, as on the real watch. This also keeps the PM
@@ -989,6 +1044,11 @@ static void draw_month_day(void) {
                    0, font_weekday_base(), ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
     return;
   }
+  if (s_settings.digit_style == DIGITS_MATRIX) {  // the weekday letters' 5x5 dots, a little narrower
+    draw_matrix(74, WEEKDAY_Y, MATRIX_DIGITS_5X5[d / 10], 5, 5, 3, 6, 2, 5, s_col[COL_WEEKDAY]);
+    draw_matrix(91, WEEKDAY_Y, MATRIX_DIGITS_5X5[d % 10], 5, 5, 3, 6, 2, 5, s_col[COL_WEEKDAY]);
+    return;
+  }
   draw_digit(75, WEEKDAY_Y, w, h, d / 10, s_col[COL_WEEKDAY]);  // with a leading zero (05)
   draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
@@ -1017,10 +1077,15 @@ static void draw_temperature(void) {
   // verticals of a full-width digit placed so they land in the sign slot.
   // Unlit parts go first so the lit one is never covered by a ghost.
   const int w = RIGHT_DIGIT_W;
-  if (!neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, 0, SEG_G, ink);
-  if (!hundred) draw_segments(TEMP_ONE_X, dy, w, dh, 0, SEG_B | SEG_C, ink);
-  if (neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, SEG_G, SEG_G, ink);
-  if (hundred) draw_segments(TEMP_ONE_X, dy, w, dh, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  if (s_settings.digit_style == DIGITS_MATRIX) {  // the minus or the 1, without ghosts
+    if (neg) draw_matrix_sign(TEMP_MINUS_X + 2, dy, dh, false, 3, ink);
+    if (hundred) draw_matrix_sign(TEMP_MINUS_X + 3, dy, dh, true, 3, ink);
+  } else {
+    if (!neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, 0, SEG_G, ink);
+    if (!hundred) draw_segments(TEMP_ONE_X, dy, w, dh, 0, SEG_B | SEG_C, ink);
+    if (neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, SEG_G, SEG_G, ink);
+    if (hundred) draw_segments(TEMP_ONE_X, dy, w, dh, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  }
   if (!valid) {
     draw_digit(TEMP_D1_X, dy, w, dh, DIGIT_MINUS, ink);
     draw_digit(TEMP_D2_X, dy, w, dh, DIGIT_MINUS, ink);
@@ -1123,7 +1188,8 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
   }
   // The "1" of 100+: the right verticals of a digit placed so they land between the mark and
   // the first digit. No unlit ghost at this size: it would crowd the digits.
-  if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
+  if (hundred && s_settings.digit_style == DIGITS_MATRIX) draw_matrix_sign(x + 13, y, h, true, 2, ink);
+  else if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
     draw_digit(d2, y, w, h, DIGIT_MINUS, ink);
@@ -1432,11 +1498,54 @@ typedef struct {
 #define IND_X0 107
 #define IND_Y0 BOX_TOP
 
+// The "Dot matrix" style's indicator labels: 3x5 letters of 2x2 px dots (10 px tall), 2 px apart.
+static const char *tiny_letter(char ch) {
+  switch (ch) {
+    case 'B': return "##.#.###.#.###.";
+    case 'C': return "####..#..#..###";
+    case 'D': return "##.#.##.##.###.";
+    case 'E': return "####..####..###";
+    case 'F': return "####..####..#..";
+    case 'G': return "####..#.##.####";
+    case 'H': return "#.##.#####.##.#";
+    case 'L': return "#..#..#..#..###";
+    case 'M': return "#.########.##.#";
+    case 'P': return "####.#####..#..";
+    case 'S': return "####..###..####";
+    case 'T': return "###.#..#..#..#.";
+    case 'U': return "#.##.##.##.####";
+    default:  return NULL;
+  }
+}
+
+static void draw_tiny_label(const char *text, GRect cell, bool right, GColor color, int density) {
+  const int tw = 8 * (int)strlen(text) - 2;
+  int x = right ? cell.origin.x + cell.size.w - tw : cell.origin.x + (cell.size.w - tw) / 2;
+  const int y = cell.origin.y + (cell.size.h - 10) / 2;
+  for (; *text; text++, x += 8) {
+    const char *bits = tiny_letter(*text);
+    for (int i = 0; bits && i < 15; i++) {
+      if (bits[i] != '#') continue;
+      for (int k = 0; k < 4; k++) {  // the dot's 4 pixels, dithered when off
+        const int px = x + i % 3 * 2 + k % 2, py = y + i / 3 * 2 + k / 2;
+        if (density >= DENSITY_FULL || BAYER4[py & 3][px & 3] < density) fill(px, py, 1, 1, color, false);
+      }
+    }
+  }
+}
+
 // An indicator's label in `cell`: lit, or faint dots when off. The system font fitted to the
 // cell, or the digit style's font.
 static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, bool right) {
   const GColor color = ind->on ? ind->ink : s_ghost;
   const int density = ind->on ? DENSITY_FULL : s_label_off_density;
+  if (s_settings.digit_style == DIGITS_MATRIX) {
+    if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+    draw_tiny_label(ind->label, cell, right, color, density);
+    graphics_release_frame_buffer(ctx, s_fb);
+    s_fb = NULL;
+    return;
+  }
   if (!font_active()) {
     draw_fitted_text(ctx, ind->label, cell, LABEL_H, color, density, right);
     return;
@@ -1810,7 +1919,8 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   if ((t = dict_find(iter, MESSAGE_KEY_DigitStyle))) {
     const char *d = t->value->cstring;
     const uint8_t style = strcmp(d, "saira") == 0 ? DIGITS_SAIRA : strcmp(d, "handjet") == 0 ? DIGITS_HANDJET
-        : strcmp(d, "iceberg") == 0 ? DIGITS_ICEBERG : strcmp(d, "stencil") == 0 ? DIGITS_STENCIL : DIGITS_SEGMENT;
+        : strcmp(d, "iceberg") == 0 ? DIGITS_ICEBERG : strcmp(d, "stencil") == 0 ? DIGITS_STENCIL
+        : strcmp(d, "matrix") == 0 ? DIGITS_MATRIX : DIGITS_SEGMENT;
     font_changed = style != s_settings.digit_style;
     s_settings.digit_style = style;
     settings_changed = true;

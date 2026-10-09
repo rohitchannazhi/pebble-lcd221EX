@@ -131,9 +131,10 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "DigitStyle", "label": "Digit style", "defaultValue": "segment",
-        "description": "7-segment is the LCD look, with faint unlit segments. The fonts are used for every text and number on the LCD (not the top and bottom bars).",
+        "description": "7-segment and Dot matrix are the LCD looks, with faint unlit segments or dots. The fonts are used for every text and number on the LCD (not the top and bottom bars).",
         "options": [
           { "label": "7-segment", "value": "segment" },
+          { "label": "Dot matrix", "value": "matrix" },
           { "label": "Condensed (based on Saira)", "value": "saira" },
           { "label": "Handjet", "value": "handjet" },
           { "label": "Angular (based on Iceberg)", "value": "iceberg" },

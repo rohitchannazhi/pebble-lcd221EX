@@ -300,6 +300,13 @@ __attribute__((export_name("preview_init"))) void preview_init(void) {
   s_weather = (Weather){ .temp = 174, .temp_min = -32, .temp_max = 214, .has_range = 1, .updated = s_time };
 }
 
+// Other sample weather (tenths of a degree Celsius), after preview_init().
+__attribute__((export_name("preview_weather"))) void preview_weather(int temp, int temp_min, int temp_max) {
+  s_weather.temp = temp;
+  s_weather.temp_min = temp_min;
+  s_weather.temp_max = temp_max;
+}
+
 // The page's local time; `is_24h` stands in for the watch's own 12/24-hour setting.
 __attribute__((export_name("preview_time"))) void preview_time(
     double now, int year, int mon, int mday, int wday, int yday, int hour, int min, int sec, int dst,
