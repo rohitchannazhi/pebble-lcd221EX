@@ -1,16 +1,16 @@
 // LCD 221: a watch face for the Pebble Time 2 (emery, 200x228) that imitates
-// the Casio W-221H: a white "LCD" with slanted 7-segment digits, a dot-matrix
-// weekday and a 2x2 indicator box, between a top and a bottom bezel.
+// the Casio W-221H: a white "LCD" with 7-segment digits, a dot-matrix weekday and
+// the indicators, between a top and a bottom bezel.
 //
 // Everything on the LCD panel is rasterized straight into the framebuffer, which
-// allows things the drawing API can't do: polygon segments with a slant and
-// gray-shade anti-aliasing, and faint "ghost" segments for the unlit parts (a
-// sparse ordered dither). Only the bezel text and indicator labels go through
-// the regular text API.
+// allows things the drawing API can't do: polygon segments snapped to whole pixels,
+// anti-aliased font glyphs, and faint "ghost" segments for the unlit parts (a sparse
+// ordered dither). Only the bezel text and indicator labels go through the regular
+// text API.
 //
 // File map (search for the "----" section banners):
 //   raster primitives  span/fill and the ghost dither
-//   7-segment digits   polygon fill, anti-aliasing, digits (outlines: segments.h)
+//   7-segment digits   polygon fill, digits (outlines: segments.h)
 //   dot-matrix glyphs  weekday letters, PM marker, small symbols
 //   data helpers       weather, steps, heart rate, theme, backlight
 //   drawing            layout constants, text helpers, one function per screen area
@@ -23,21 +23,11 @@
 #include <pebble.h>
 #include "segments.h"
 
-// The 7-segment digits (time, date, temperature) lean like the W-221H's: LCD_SLANT
-// is the lean in thousandths of the height (75 = 7.5%, as measured on the
-// original). LCD_AA smooths the edges of the slanted digits with the display's gray
-// shades. Upright digits (the "Slanted digits" setting off) are drawn without
-// smoothing: their edges are vertical and horizontal, so plain pixels are sharper.
-#define LCD_SLANT 75
-#define LCD_AA true
-#define SETTINGS_KEY 17  // bumped whenever existing Settings fields change layout (new fields may use free padding)
+#define SETTINGS_KEY 18  // bumped whenever Settings changes layout (older saves are then ignored)
 #define WEATHER_KEY 6  // bumped whenever Weather changes layout
 #define COLORS_KEY 18  // ColorSettings, persisted apart from Settings so old saves stay valid
 #define WEATHER_MAX_AGE (3 * 60 * 60)
 #define WEATHER_REFRESH_MIN 30
-#define SECONDS_BURST_DEFAULT_S 30  // how long the seconds tick after a shake (setting: 5..120)
-#define SECONDS_BURST_MIN_S 5
-#define SECONDS_BURST_MAX_S 120
 
 #define BACKLIGHT_SYSTEM 0xFFFFFFFFu  // the user's normal backlight colour
 #define BACKLIGHT_CUSTOM 0xFFFFFFFEu  // use backlight_custom
@@ -47,16 +37,9 @@ typedef enum {
   VIBE_NONE, VIBE_SHORT, VIBE_LONG, VIBE_DOUBLE, VIBE_TRIPLE, VIBE_HEARTBEAT, VIBE_SOS, VIBE_COUNT
 } VibeChoice;
 
-// Settings.hourly_vibe when on. It was the "vibration only" choice of the hourly chime, whose
-// sounds were removed in 1.4.0: saved settings that chose it keep vibrating, the sounds are off.
-#define HOURLY_VIBE_ON 4
-
 // Time format and temperature unit: follow the watch, or force one.
 enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
-// The black case can be "charcoal": dark gray dots dithered over it, 25% of the pixels or a
-// checkerboard. The value is also the dots' density out of 16 (see DENSITY_FULL) divided by 4.
-enum { CASE_SOLID = 0, CASE_DOTS = 1, CASE_CHECKER = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
 enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG = 3, DIGITS_STENCIL = 4, DIGITS_COUNT };
@@ -64,23 +47,22 @@ enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG 
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
 // The LCD window's top and bottom edges: like the dividers, or a style of their own.
-enum { EDGE_MATCH = 0, EDGE_TAB = 1, EDGE_NOTCHED = 2, EDGE_CIRCUIT = 3, EDGE_DOUBLE = 4, EDGE_COUNT };
+enum { EDGE_MATCH = 0, EDGE_TAB = 1, EDGE_NOTCHED = 2, EDGE_COUNT };
 
 // What marks today's low and high: tall arrows, triangles, or LO / HI.
 enum { MARKS_TALL = 0, MARKS_TRIANGLES = 1, MARKS_LOHI = 2, MARKS_COUNT };
 
-// Indicator styles: the framed 2x2 grid, a pill per indicator, only the active ones, or icons.
-enum { IND_GRID = 0, IND_PILLS = 1, IND_ACTIVE = 2, IND_ICONS = 3, IND_COUNT };
-
+// Indicator styles: a pill per indicator, only the active ones, or icons.
+enum { IND_PILLS = 0, IND_ACTIVE = 1, IND_ICONS = 2, IND_COUNT };
 
 // Everything the settings page controls, grouped and ordered like the page itself
 // (config.js). Saved with persist_write_data: bump SETTINGS_KEY when it changes.
 typedef struct {
   // Time & date
   uint8_t time_format;         // FORMAT_AUTO follows the watch's 12/24-hour setting
-  bool day_first;
-  // Right box
-  bool show_seconds;           // seconds instead of the temperature (always, or after a shake: see below)
+  bool hour_no_zero;           // 24-hour time has no leading zero (7:05, like the original)
+  bool pm_in_box;              // 12-hour time has a leading zero and PM moves into the indicators
+  uint8_t range_marks;         // MARKS_TALL, MARKS_TRIANGLES or MARKS_LOHI: what marks the low and the high
   uint8_t temp_unit;           // UNIT_AUTO follows the watch's measurement system
   // Top bezel
   bool show_battery;           // top-left: battery level, else top_left
@@ -88,36 +70,20 @@ typedef struct {
   bool show_steps;             // top-right: step count, else top_right
   char top_right[20];          // top-right text when the step count is off, upper-cased
   // Bottom bezel
-  bool heart_rate;             // HR badge + latest BPM instead of the WR badge
   char bezel_label[16];        // printed on the bottom bezel, upper-cased
   // Appearance
   bool silver;                 // silver case instead of black
   bool inverted;               // light digits on a dark LCD
-  bool slanted;                // digits lean like the original's (off: upright and sharper)
+  uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
+  uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
+  uint8_t edge_style;          // EDGE_MATCH (the divider style's edge) or one of the window edge styles
+  uint8_t indicator_style;     // IND_PILLS, IND_ACTIVE or IND_ICONS
   bool ghosts;                 // show faint unlit segments
   uint32_t backlight;          // 0xRRGGBB tint, BACKLIGHT_SYSTEM, or BACKLIGHT_CUSTOM
   uint32_t backlight_custom;   // 0xRRGGBB, from the settings page's colour picker
   // Alerts
   uint8_t vibe_disconnect;     // VibeChoice played when the phone disconnects
   uint8_t vibe_connect;        // VibeChoice played when it reconnects
-  uint8_t hourly_vibe;         // HOURLY_VIBE_ON: a double pulse on the hour (0: off)
-  uint8_t unused1, unused2;    // were the hourly chime's Quiet Time and volume settings
-  // Added after the groups above, at the end, so settings saved by earlier versions still load.
-  // (They sit in what used to be padding, so the struct keeps its size; init() sanitises them.)
-  uint8_t seconds_on_shake;    // 1: seconds tick only for a while after a wrist shake
-  uint8_t seconds_burst_s;     // how many seconds they tick for
-  uint8_t hour_no_zero;        // 1: 24-hour time has no leading zero (7:05, like the original)
-  uint8_t unused3;             // was the single-digit date setting; dates always have leading zeros now
-  uint8_t date_range;          // 1: the date box shows today's high and low; the day of the month moves up next to the weekday
-  uint8_t case_pattern;        // black case only: CASE_SOLID, or dark gray dots over it (CASE_DOTS, CASE_CHECKER)
-  // Added at the end: settings saved before are shorter, and these keep their defaults (0).
-  uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
-  uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
-  uint8_t pm_in_box;           // 1: 12-hour time has a leading zero and PM moves into the indicator box
-  uint8_t indicator_style;     // IND_GRID, IND_PILLS, IND_ACTIVE or IND_ICONS
-  uint8_t range_marks;         // MARKS_TALL, MARKS_TRIANGLES or MARKS_LOHI: what marks the low and the high
-  // Added after the padding ran out: settings saved before are 4 bytes shorter and keep this at 0.
-  uint8_t edge_style;          // EDGE_MATCH (the divider style's edge) or one of the window edge styles
 } Settings;
 
 typedef struct {
@@ -132,7 +98,7 @@ typedef struct {
 typedef enum {
   COL_CASE, COL_TOP_LEFT, COL_TOP_RIGHT, COL_BADGE, COL_HEART, COL_LABEL,  // case and what is printed on it
   COL_EDGE, COL_LCD, COL_UNLIT,                                            // the LCD window
-  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row of the LCD (COL_SIG: unused)
+  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row (COL_FRAME, COL_SIG: unused)
   COL_HOURS, COL_COLON, COL_MINUTES, COL_PM,                               // the time
   COL_DST, COL_DATE, COL_RULES, COL_RIGHT,                                 // bottom row of the LCD
   COL_COUNT
@@ -174,8 +140,8 @@ static uint32_t color_key(int i) {
   return keys[i];
 }
 
-// (SIG, the hourly chime's indicator, made way for DST; COL_SIG stays so saved colours keep their
-// places.)
+// (COL_FRAME, the old indicator grid's outline, and COL_SIG, the hourly chime's indicator, are
+// no longer drawn; they stay so saved colours keep their places.)
 
 static Window *s_window;
 static Layer *s_canvas;
@@ -185,9 +151,7 @@ static Settings s_settings;
 static ColorSettings s_colors;
 static Weather s_weather;
 static time_t s_weather_saved;       // when s_weather was last written to persistent storage
-static bool s_focus = true;          // the face is the app in front (not covered by a system window)
 static bool s_quiet;                 // Quiet Time, read once per redraw
-static time_t s_burst_until;         // seconds_on_shake: the seconds show until this time (0 = idle)
 static struct tm s_now;
 static BatteryChargeState s_battery;
 static bool s_connected;
@@ -201,8 +165,6 @@ static GColor s_col[COL_COUNT];
 static GColor s_lcd;                 // the LCD's background (= s_col[COL_LCD])
 static GColor s_ghost;               // unlit segments and dots, drawn dithered (= s_col[COL_UNLIT])
 static int s_ghost_density;          // dot density of s_ghost, out of DENSITY_FULL
-static int s_slant;                  // digit lean in thousandths of the height (0 = upright)
-static bool s_smooth;                // anti-alias the digits' edges (only while slanted)
 static int s_label_off_density;      // dot density of inactive indicator labels (drawn in s_ghost)
 
 // ---------------------------------------------------------------------------
@@ -260,7 +222,7 @@ static const uint8_t DIGIT_SEGS[] = {
 
 static int floor_div(int32_t a, int32_t b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
 
-// Upright digits: maps a 0..1000 coordinate to whole pixels so that every bar of a digit
+// Maps a 0..1000 coordinate to whole pixels so that every bar of a digit
 // has the same thickness (plain scaling gives bars of 8 and 9 pixels side by side).
 // `knots` are the bar edges in font units and `px` where they land, in pixels.
 static int snap_axis(int v, int size, const int16_t *knots, const int *px, int count) {
@@ -287,11 +249,6 @@ static void snap_poly(int w, int h, const int16_t *pts, int n, int16_t *out) {
   }
 }
 
-// Fills a polygon given in 0..1000 coordinates, scaled into the box (x, y, w, h).
-// A pixel is filled when its centre is inside (even-odd rule).
-// `slant` leans the shape right like italics, in thousandths of the height:
-// each row is shifted by its height above the bottom times slant/1000, with
-// sub-pixel precision so edges stay clean diagonals.
 // The rows (0..h-1) a polygon given in 0..1000 coordinates can touch, with a row of margin:
 // segments cover only 12-48% of a digit's height, so most rows need no scanning at all.
 static void poly_rows(const int16_t *pts, int n, int h, int *first, int *last) {
@@ -306,17 +263,15 @@ static void poly_rows(const int16_t *pts, int n, int h, int *first, int *last) {
   if (*last > h - 1) *last = h - 1;
 }
 
-static void fill_poly(int x, int y, int w, int h, const int16_t *pts, int n, int slant, GColor c,
-                      bool dither) {
+// Fills a polygon given in 0..1000 coordinates (up to 8 points), scaled into the box (x, y, w, h)
+// with its bars snapped to whole pixels. A pixel is filled when its centre is inside (even-odd rule).
+static void fill_poly(int x, int y, int w, int h, const int16_t *pts, int n, GColor c, bool dither) {
   int16_t snapped[16];
-  if (slant == 0 && n <= 8) {
-    snap_poly(w, h, pts, n, snapped);
-    pts = snapped;
-  }
+  snap_poly(w, h, pts, n, snapped);
+  pts = snapped;
   int first, last;
   poly_rows(pts, n, h, &first, &last);
   for (int r = first; r <= last; r++) {
-    int32_t shift = (int32_t)(2 * (h - r) - 1) * slant;  // row shift, in 1/2000 px
     int32_t yn = (int32_t)(2 * r + 1) * 1000 / (2 * h);
     int32_t xs[8];
     int count = 0;
@@ -331,20 +286,12 @@ static void fill_poly(int x, int y, int w, int h, const int16_t *pts, int n, int
       }
     }
     for (int i = 0; i + 1 < count; i += 2) {
-      int c0 = -floor_div(1000 - 2 * xs[i] * w - shift, 2000);   // ceil(px - 0.5)
-      int c1 = floor_div(2 * xs[i + 1] * w + shift - 1000, 2000);
+      int c0 = -floor_div(1000 - 2 * xs[i] * w, 2000);   // ceil(px - 0.5)
+      int c1 = floor_div(2 * xs[i + 1] * w - 1000, 2000);
       if (c0 <= c1) span(y + r, x + c0, x + c1, c, dither);
     }
   }
 }
-
-// Anti-aliased version of fill_poly for lit (ink) shapes: each pixel's
-// coverage is measured exactly across its width at 4 heights, then drawn in
-// one of the display's shades between ink and white (black, dark gray, light
-// gray). A pixel is only ever darkened, never lightened, so shapes drawn one
-// after another (neighbouring segments) don't eat into each other.
-#define AA_SUB 4
-#define AA_MAX_W 96
 
 // `wa` thirds of colour a mixed with the rest of colour b (the display has 4 levels per
 // channel). With black on white, wa = 1 gives light gray and wa = 2 gives dark gray.
@@ -356,60 +303,8 @@ static GColor mix_color(GColor a, GColor b, int wa) {
   return c;
 }
 
-// `ink` is the digit's colour; the shades between it and the LCD colour are worked out here.
-static void fill_poly_aa(int x, int y, int w, int h, const int16_t *pts, int n, int slant,
-                         GColor ink) {
-  const uint8_t aa[3] = { mix_color(ink, s_lcd, 1).argb, mix_color(ink, s_lcd, 2).argb, ink.argb };
-  int32_t cov[AA_MAX_W];
-  int cols = w + h * slant / 1000 + 2;
-  if (cols > AA_MAX_W) cols = AA_MAX_W;
-  int first, last;
-  poly_rows(pts, n, h, &first, &last);
-  for (int r = first; r <= last; r++) {
-    memset(cov, 0, sizeof(cov[0]) * cols);
-    for (int k = 0; k < AA_SUB; k++) {
-      // Sub-row centre in 0..1000 shape units, and its slant shift in 1/1000 px.
-      int32_t yn = (int32_t)(2 * AA_SUB * r + 2 * k + 1) * 1000 / (2 * AA_SUB * h);
-      int32_t shift = (int32_t)(2 * AA_SUB * (h - r) - 2 * k - 1) * slant / (2 * AA_SUB);
-      int32_t xs[8];
-      int count = 0;
-      for (int i = 0; i < n && count < 8; i++) {
-        int32_t x0 = pts[2 * i], y0 = pts[2 * i + 1];
-        int32_t x1 = pts[2 * ((i + 1) % n)], y1 = pts[2 * ((i + 1) % n) + 1];
-        if ((y0 <= yn) != (y1 <= yn)) xs[count++] = x0 + (x1 - x0) * (yn - y0) / (y1 - y0);
-      }
-      for (int i = 1; i < count; i++) {
-        for (int j = i; j > 0 && xs[j - 1] > xs[j]; j--) {
-          int32_t tmp = xs[j]; xs[j] = xs[j - 1]; xs[j - 1] = tmp;
-        }
-      }
-      for (int i = 0; i + 1 < count; i += 2) {
-        int32_t a = xs[i] * w + shift, b = xs[i + 1] * w + shift;  // span in 1/1000 px
-        if (a < 0) a = 0;
-        if (b > (int32_t)cols * 1000) b = (int32_t)cols * 1000;
-        for (int c = a / 1000; c < cols && (int32_t)c * 1000 < b; c++) {
-          int32_t lo = a > c * 1000 ? a : c * 1000, hi = b < (c + 1) * 1000 ? b : (c + 1) * 1000;
-          if (hi > lo) cov[c] += hi - lo;
-        }
-      }
-    }
-    int yy = y + r;
-    if (yy < 0 || yy >= PBL_DISPLAY_HEIGHT) continue;
-    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
-    for (int c = 0; c < cols; c++) {
-      // Full coverage = AA_SUB * 1000.
-      int level = cov[c] >= 3000 ? 2 : cov[c] >= 1800 ? 1 : cov[c] >= 600 ? 0 : -1;
-      int xx = x + c;
-      if (level < 0 || xx < row.min_x || xx > row.max_x) continue;
-      uint8_t cur = row.data[xx];
-      int cur_level = cur == aa[2] ? 2 : cur == aa[1] ? 1 : -1;
-      if (level > cur_level) row.data[xx] = aa[level];
-    }
-  }
-}
-
 // A 7-segment digit built from the segment outlines of the "7-Segment" font by
-// Jan Bobrowski (see segments.h), scaled to the box and slanted by s_slant. Only the
+// Jan Bobrowski (see segments.h), scaled to the box. Only the
 // segments in `present` are drawn; unlit ones appear as ghosts (if enabled),
 // drawn first so lit segments always win.
 static void draw_segments(int x, int y, int w, int h, uint8_t on, uint8_t present, GColor ink) {
@@ -417,9 +312,7 @@ static void draw_segments(int x, int y, int w, int h, uint8_t on, uint8_t presen
     uint8_t mask = present & (pass ? on : (uint8_t)~on);
     for (int i = 0; i < 7; i++) {
       if (!(mask & (1 << i))) continue;
-      if (pass && s_smooth) fill_poly_aa(x, y, w, h, SEG_POLYS[i], SEG_POLY_LEN[i], s_slant, ink);
-      else fill_poly(x, y, w, h, SEG_POLYS[i], SEG_POLY_LEN[i], s_slant,
-                     pass ? ink : s_ghost, !pass);
+      fill_poly(x, y, w, h, SEG_POLYS[i], SEG_POLY_LEN[i], pass ? ink : s_ghost, !pass);
     }
   }
 }
@@ -497,14 +390,10 @@ static void draw_matrix(int x, int y, const char *bits, int cols, int rows, int 
   }
 }
 
-// Day-of-week text: 5x5 letters with 4x5 dots on a 5x6 grid, one column apart.
-// Upright, like the W-221H's. `narrow` letters (3x5 dots on a 4x6 grid, 22px apart) leave
-// room for the day of the month after them.
-static void draw_day(int x, int y, const char *text, bool narrow, GColor ink) {
-  for (int i = 0; text[i]; i++) {
-    if (narrow) draw_matrix(x + i * 22, y, day_glyph(text[i]), 5, 5, 4, 6, 3, 5, ink);
-    else draw_matrix(x + i * 30, y, day_glyph(text[i]), 5, 5, 5, 6, 4, 5, ink);
-  }
+// Day-of-week text: 5x5 letters with 3x5 dots on a 4x6 grid, 22px apart, leaving room for the
+// day of the month after them.
+static void draw_day(int x, int y, const char *text, GColor ink) {
+  for (int i = 0; text[i]; i++) draw_matrix(x + i * 22, y, day_glyph(text[i]), 5, 5, 4, 6, 3, 5, ink);
 }
 
 // ---------------------------------------------------------------------------
@@ -670,13 +559,8 @@ static bool is_dark(GColor c) { return 299 * c.r + 587 * c.g + 114 * c.b < 1500;
 static void apply_theme(void) {
   bool inv = s_settings.inverted;
 
-  // The digits.
-  // (The fonts are upright.)
-  s_slant = s_settings.slanted && !font_active() ? LCD_SLANT : 0;
-  s_smooth = LCD_AA && s_slant != 0;
-
   // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
-  // black or silver either way (Case color; the charcoal cases are black with a pattern).
+  // black or silver either way (Case color).
   if (s_colors.enabled) {
     for (int i = 0; i < COL_COUNT; i++) s_col[i] = (GColor){ .argb = s_colors.argb[i] | 0xC0 };
     s_col[COL_CASE] = s_settings.silver ? GColorLightGray : GColorBlack;
@@ -722,23 +606,19 @@ static void apply_backlight(void) {
 #define LCD_W 200
 #define LCD_H 176
 
-// Row 1: weekday (left) and the 2x2 indicator box (right).
-#define WEEKDAY_X 8  // as far from the edge as the indicator box is from the other one
-#define WEEKDAY_NARROW_X 6  // the narrowed weekday, followed by the day of the month
+// Row 1: weekday and day of the month (left) and the indicators (right), in the rows
+// BOX_TOP..BOX_BOTTOM.
+#define WEEKDAY_X 6
 #define WEEKDAY_Y 34
-#define BOX_LEFT 109    // indicator box, left outer line (left cells as wide as the right ones)
-#define BOX_RIGHT 191   // indicator box, right outer line
-#define BOX_DIV 152     // indicator box, vertical divider (off-centre: the left column has MUTE, the widest)
-#define BOX_TOP 34      // indicator box, top outer line (= weekday top)
-#define BOX_BOTTOM 62   // indicator box, bottom outer line (= weekday bottom)
-#define BOX_MID 48      // indicator box, middle divider
-#define BOX_RADIUS 6    // indicator box, radius of the rounded corners
+#define BOX_RIGHT 191   // the indicators' right edge
+#define BOX_DIV 152     // the "active only" style's second column ends 2 px left of this
+#define BOX_TOP 34      // the indicators' row: top (= weekday top)
+#define BOX_BOTTOM 62   // and bottom (= weekday bottom)
 #define LABEL_H 10      // indicator label height in rows
 
 // Row 2: the time.
 // Proportions measured on the W-221H: the time is ~41% of the LCD height and sits
-// just above the rule, its digits are ~7% wider than tall-relative to the LCD, and
-// they are spread across nearly the whole width: the first digit's box starts about
+// just above the rule, and its digits are spread across nearly the whole width: the first digit's box starts about
 // 4px from the edge, with the PM marker in the empty left part of that box. (The
 // original's marker starts level with the digits and 6px from the edge; here it is
 // nudged up and in a little.)
@@ -748,12 +628,11 @@ static void apply_backlight(void) {
 #define PM_X 7    // the PM marker's distance from the LCD's left edge
 #define PM_DY -2  // and how many rows it sits above the top of the digits
 
-// Row 3: date (left) and seconds / temperature (right), under a 2px rule.
+// Row 3: today's low and high (left) and the temperature (right), under a 2px rule.
 #define ROW3_LINE_Y 154
-#define ROW3_DIV_X 126  // vertical divider between the date box and the right box
-#define ROW3_Y 160      // top of the right box's digits
+#define ROW3_DIV_X 126  // vertical divider between the low / high box and the right box
 #define ROW3_H 36       // height of the right box's digits
-// The right box's digits (seconds, temperature) and the temperature's parts: the sign slot's
+// The right box's digits and the temperature's parts: the sign slot's
 // minus, the full-width digit whose right verticals make the "1" of 100+, the two digits and
 // the degree mark.
 #define RIGHT_DIGIT_W 19
@@ -788,20 +667,14 @@ static void draw_bezel_text(GContext *ctx, const char *text, int x, int y, int w
 
 // Draws a label so it fits its indicator-box cell. The text is drawn in the
 // bold font with its ink starting on the cell's top row, then re-sampled in
-// the framebuffer (nearest-neighbour, so edges stay crisp), one letter at a time:
-//  - vertically to `height` rows by dropping rows from inside each letter (see
-//    row_to_drop), so horizontal bars keep their thickness;
-//  - optionally horizontally, each letter to its own width `letter_w[i]`
-//    (NULL = keep the width), with 2px letter gaps and stems kept at 2px;
-//  - drawn with the ordered dither at `density` (out of DENSITY_FULL).
-// The result is centred in `cell` (or right-aligned); only the cell's interior is touched.
-#define FIT_MAX_W 40  // the widest indicator cell is 39 px,
-#define FIT_MAX_H 12  // and every cell is 12 rows tall
+// the framebuffer (nearest-neighbour, so edges stay crisp), one letter at a time,
+// vertically to `height` rows by dropping rows from inside each letter (see row_to_drop),
+// so horizontal bars keep their thickness, and drawn with the ordered dither at `density`
+// (out of DENSITY_FULL). The result is centred in `cell` (or right-aligned); only the
+// cell's interior is touched.
+#define FIT_MAX_W 42  // the widest label cell ("active only") is 42 px,
+#define FIT_MAX_H 12  // and none is taller than 12 rows
 #define FIT_MAX_LETTERS 8
-_Static_assert(BOX_RIGHT - BOX_DIV - 2 <= FIT_MAX_W && BOX_DIV - BOX_LEFT - 3 <= FIT_MAX_W,
-               "an indicator cell is wider than the label scratch buffer");
-_Static_assert(BOX_MID - BOX_TOP - 2 <= FIT_MAX_H && BOX_BOTTOM - BOX_MID - 2 <= FIT_MAX_H,
-               "an indicator cell is taller than the label scratch buffer");
 #define BAR_RUN 4  // a horizontal run of this many ink pixels makes a row part of a bar
 
 typedef uint8_t FitRows[FIT_MAX_H][FIT_MAX_W];
@@ -839,8 +712,8 @@ static int row_to_drop(const FitRows buf, const int *rows, int n, int x0, int x1
   return best;
 }
 
-static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, const int8_t *letter_w,
-                             int letter_w_n, int height, GColor color, int density, bool right) {
+static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, int height, GColor color,
+                             int density, bool right) {
   if (color.argb == s_lcd.argb) return;  // invisible, and the ink could not be told from the LCD
   // Gothic 18 bold capitals start 7px below the text box's top.
   GRect box = GRect(cell.origin.x - 1, cell.origin.y - 7, cell.size.w + 2, 22);
@@ -900,29 +773,14 @@ static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, const 
       n--;
     }
 
-    // Horizontal: keep the letter's width (and the text's own spacing), or
-    // stretch it, with stems trimmed back to the bold font's 2px (bars by 1px).
-    int tw = len, gap = 0;
-    if (letter_w) {
-      tw = (letter < letter_w_n && letter_w[letter] > len) ? letter_w[letter] : len;
-      gap = kept > 0 ? 2 : 0;
-    } else if (kept > 0) {
-      gap = start - prev_end - 1;
-    }
-    if (kept + gap + tw > FIT_MAX_W) break;
+    // Horizontal: the letter's width and the text's own spacing are kept.
+    const int gap = kept > 0 ? start - prev_end - 1 : 0;
+    if (kept + gap + len > FIT_MAX_W) break;
     for (int y = 0; y < rows_out; y++) {
       for (int i = 0; i < gap; i++) out[y][kept + i] = 0;
-      for (int i = 0; i < tw; i++) out[y][kept + gap + i] = buf[rows[y]][start + i * len / tw];
-      if (tw == len) continue;
-      int run_len = 0;
-      for (int i = 0; i <= tw; i++) {
-        if (i < tw && out[y][kept + gap + i]) { run_len++; continue; }
-        int trim = (run_len >= 3 && run_len <= 5) ? run_len - 2 : (run_len > 5 ? 1 : 0);
-        for (int k = 1; k <= trim; k++) out[y][kept + gap + i - k] = 0;
-        run_len = 0;
-      }
+      for (int i = 0; i < len; i++) out[y][kept + gap + i] = buf[rows[y]][start + i];
     }
-    kept += gap + tw;
+    kept += gap + len;
     prev_end = last;
     letter++;
   }
@@ -963,33 +821,6 @@ static int display_temp(int t10) {
   return (t10 + (t10 >= 0 ? 5 : -5)) / 10;
 }
 
-// The indicator box's outline. Like the W-221H, the top-right and bottom-left
-// corners are rounded (radius BOX_RADIUS); the outer frame is 2px, the inner
-// dividers are 1px.
-static void draw_indicator_frame(void) {
-  // RING: one quadrant of a 2px ring of radius 6 around the corner's centre,
-  // as (dx, dy) offsets (pixel centres 4.5 <= distance < 6.5).
-  _Static_assert(BOX_RADIUS == 6, "RING is drawn for radius 6");
-  static const int8_t RING[][2] = {
-    {0, 5}, {0, 6}, {1, 5}, {1, 6}, {2, 5}, {2, 6}, {3, 4}, {3, 5}, {4, 3}, {4, 4},
-    {4, 5}, {5, 0}, {5, 1}, {5, 2}, {5, 3}, {5, 4}, {6, 0}, {6, 1}, {6, 2},
-  };
-  const int r = BOX_RADIUS;
-  const int ur_x = BOX_RIGHT - r, ur_y = BOX_TOP + r;    // top-right corner centre
-  const int ll_x = BOX_LEFT + r, ll_y = BOX_BOTTOM - r;  // bottom-left corner centre
-  fill(BOX_LEFT, BOX_TOP, ur_x - BOX_LEFT, 2, s_col[COL_FRAME], false);              // top
-  fill(BOX_RIGHT - 1, ur_y, 2, BOX_BOTTOM - ur_y + 1, s_col[COL_FRAME], false);      // right
-  fill(ll_x + 1, BOX_BOTTOM - 1, BOX_RIGHT - ll_x, 2, s_col[COL_FRAME], false);      // bottom
-  fill(BOX_LEFT, BOX_TOP, 2, ll_y - BOX_TOP, s_col[COL_FRAME], false);               // left
-  for (unsigned i = 0; i < ARRAY_LENGTH(RING); i++) {
-    fill(ur_x + RING[i][0], ur_y - RING[i][1], 1, 1, s_col[COL_FRAME], false);
-    fill(ll_x - RING[i][0], ll_y + RING[i][1], 1, 1, s_col[COL_FRAME], false);
-  }
-  // Inner dividers: solid 1px lines, meeting the inside of the frame.
-  fill(BOX_LEFT + 2, BOX_MID, BOX_RIGHT - BOX_LEFT - 3, 1, s_col[COL_FRAME], false);
-  fill(BOX_DIV, BOX_TOP + 2, 1, BOX_BOTTOM - BOX_TOP - 3, s_col[COL_FRAME], false);
-}
-
 // The big time, with the PM marker.
 static void draw_time(void) {
   bool is24 = is_24h();
@@ -1011,10 +842,9 @@ static void draw_time(void) {
   int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero) || zero12) ? hour / 10 : DIGIT_BLANK;
   if (font_active()) {
     // Each digit centred in its box, the group centred on the digits' height; the font's colon
-    // is centred on the digits too (tools/gen_fonts.py).
+    // is centred on the digits too (tools/gen_fonts.py). The glyphs sit FONT_TIME_DX right of
+    // the boxes' centres, which centres the time on the screen.
     const int base = ty + (th + font_height(FG_TIME)) / 2;
-    // (The boxes suit the slanted segments; upright, they sit FONT_TIME_DX further right, which
-    // centres the time on the screen.)
     enum { FONT_TIME_DX = 3 };
     const int c0 = X[0] + tw / 2 + FONT_TIME_DX, c1 = X[1] + tw / 2 + FONT_TIME_DX;
     const int c2 = X[2] + tw / 2 + FONT_TIME_DX, c3 = X[3] + tw / 2 + FONT_TIME_DX;
@@ -1034,11 +864,10 @@ static void draw_time(void) {
     draw_segments(X[0], ty, tw, th, tens == 1 ? SEG_B | SEG_C : 0, SEG_B | SEG_C, s_col[COL_HOURS]);
   }
   draw_digit(X[1], ty, tw, th, hour % 10, s_col[COL_HOURS]);
-  // The colon's dots follow the digits' slant. As on the original, their centres
-  // sit 36% and 70% of the way down the digits (not symmetrically).
+  // As on the original, the colon's dots are centred 36% and 70% of the way down the digits.
   const int dot = 7, dot1 = th * 36 / 100, dot2 = th * 70 / 100;  // dot size; centres below the top
-  fill(colon_x + (th - dot1) * s_slant / 1000, ty + dot1 - dot / 2, dot, dot, s_col[COL_COLON], false);
-  fill(colon_x + (th - dot2) * s_slant / 1000, ty + dot2 - dot / 2, dot, dot, s_col[COL_COLON], false);
+  fill(colon_x, ty + dot1 - dot / 2, dot, dot, s_col[COL_COLON], false);
+  fill(colon_x, ty + dot2 - dot / 2, dot, dot, s_col[COL_COLON], false);
   draw_digit(X[2], ty, tw, th, s_now.tm_min / 10, s_col[COL_MINUTES]);
   draw_digit(X[3], ty, tw, th, s_now.tm_min % 10, s_col[COL_MINUTES]);
 }
@@ -1050,41 +879,18 @@ static int row3_base(int h) {
   return (top + bottom + 1) / 2 + h / 2;
 }
 
-// The date as "DD-MM" or "MM-DD". As on the W-221H, its digits are about 72% as
-// tall as the right box's and share their baseline (so the time stands out), centred
-// in the date box.
-static void draw_date(void) {
-  const GColor ink = s_col[COL_DATE];
-  int first = s_settings.day_first ? s_now.tm_mday : s_now.tm_mon + 1;
-  int second = s_settings.day_first ? s_now.tm_mon + 1 : s_now.tm_mday;
-  const int w = 15, h = 26;
-  const int y = row3_base(h) - h;  // bottom aligned with the right box's digits
-  if (font_active()) {  // with leading zeros, like everything else
-    char text[8];
-    snprintf(text, sizeof(text), "%02d-%02d", first, second);
-    font_draw_text(FG_DATE, text, 0, ROW3_DIV_X, row3_base(font_height(FG_DATE)), ALIGN_CENTER, ink,
-                   DENSITY_FULL);
-    return;
-  }
-  draw_digit(27, y, w, h, first / 10, ink);
-  draw_digit(46, y, w, h, first % 10, ink);
-  draw_segments(64, y, 8, h, SEG_G, SEG_G, ink);  // dash: the font's middle bar
-  draw_digit(75, y, w, h, second / 10, ink);
-  draw_digit(94, y, w, h, second % 10, ink);
-}
-
 // The baseline of the weekday (and the day of the month) in a font: centred on the indicators' row.
 static int font_weekday_base(void) {
   return (BOX_TOP + BOX_BOTTOM + font_height(FG_WEEKDAY)) / 2;
 }
 
-// With the date box showing the high and low: the day of the month after the (narrowed) weekday,
-// in 7-segment digits as tall as the weekday letters, so the row reads e.g. "MON 05".
+// The day of the month after the weekday, in 7-segment digits as tall as the weekday letters,
+// so the row reads e.g. "MON 05".
 static void draw_month_day(void) {
   const int d = s_now.tm_mday, w = 11, h = BOX_BOTTOM - BOX_TOP;
   if (font_active()) {  // in the weekday's font and size, after it (see draw_lcd)
     char text[3] = { '0' + d / 10, '0' + d % 10, 0 };
-    font_draw_text(FG_WEEKDAY, text, font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + WEEKDAY_NARROW_X + 4,
+    font_draw_text(FG_WEEKDAY, text, font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + WEEKDAY_X + 4,
                    0, font_weekday_base(), ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
     return;
   }
@@ -1092,21 +898,7 @@ static void draw_month_day(void) {
   draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
 
-// Right box, option 1: the seconds, two digits centred in the box.
-static void draw_seconds(void) {
-  const GColor ink = s_col[COL_RIGHT];
-  if (font_active()) {
-    char text[3] = { '0' + s_now.tm_sec / 10, '0' + s_now.tm_sec % 10, 0 };
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, row3_base(font_height(FG_RIGHT)),
-                   ALIGN_CENTER, ink, DENSITY_FULL);
-    return;
-  }
-  const int top = row3_base(ROW3_H) - ROW3_H;
-  draw_digit(143, top, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec / 10, ink);
-  draw_digit(165, top, RIGHT_DIGIT_W, ROW3_H, s_now.tm_sec % 10, ink);
-}
-
-// Right box, option 2: the temperature. A half-width sign slot (minus, or the
+// The right box: the temperature. A half-width sign slot (minus, or the
 // "1" of 100+ in Fahrenheit) followed by two digits, so -99..199 all fit; "--"
 // while there is no recent weather.
 static void draw_temperature(void) {
@@ -1142,8 +934,7 @@ static void draw_temperature(void) {
     draw_digit(TEMP_D1_X, dy, w, dh, tens, ink);
     draw_digit(TEMP_D2_X, dy, w, dh, v % 10, ink);
   }
-  // Degree mark: a round 7x7 ring, 2px thick, shifted with the digits' slanted
-  // top edge.
+  // Degree mark: a round 7x7 ring, 2px thick.
   static const char DEGREE_BITS[] =
     "..###.."
     ".#####."
@@ -1152,10 +943,10 @@ static void draw_temperature(void) {
     "##...##"
     ".#####."
     "..###..";
-  draw_dots(TEMP_DEG_X + (dh - 4) * s_slant / 1000, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
+  draw_dots(TEMP_DEG_X, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
-// The date box's alternative to the date: today's low and high side by side, centred in the
+// Today's low and high side by side, centred in the
 // bottom row, with a short divider between them. Each is a mark (a tall arrow, a triangle, or
 // LO / HI: range_marks), a narrow slot for the "1" of 100+ and two digits; no degree mark (the
 // right box's temperature has one, and the space goes to bigger digits). Below zero, the minus
@@ -1198,14 +989,13 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
   const int d1 = x + 20, d2 = x + 37;  // the digits
   int temp = display_temp(t10), v = abs(temp);
   bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  // The marks sit level with the middle of the digits, shifted with their slant.
-  const int sx = (h / 2) * s_slant / 1000;
+  // The marks sit level with the middle of the digits.
   bool minus_before = true;  // the minus goes before the number, except above the triangles
   switch (s_settings.range_marks) {
     case MARKS_TRIANGLES: {  // a 15x8 triangle, with a below-zero minus above it
       const int ay = cy - 4;
-      draw_arrow(x + 7 + sx, ay, high, 8, 8, 15, 0, ink);
-      if (neg) fill(x + 2 + 12 * s_slant / 1000, ay - 9, 11, 3, ink, false);
+      draw_arrow(x + 7, ay, high, 8, 8, 15, 0, ink);
+      if (neg) fill(x + 2, ay - 9, 11, 3, ink, false);
       minus_before = false;
       break;
     }
@@ -1214,11 +1004,11 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
         font_draw_text(FG_LABEL, high ? "HI" : "LO", x, 0, cy + font_height(FG_LABEL) / 2, ALIGN_LEFT, ink,
                        DENSITY_FULL);
       } else {
-        draw_small_letters(x + sx, cy - 5, high ? "HI" : "LO", ink);
+        draw_small_letters(x, cy - 5, high ? "HI" : "LO", ink);
       }
       break;
     default:  // a tall arrow: 26 px, a 7 px head 11 px wide and a 2 px shaft
-      draw_arrow(x + 5 + sx, cy - 13, high, 26, 7, 11, 2, ink);
+      draw_arrow(x + 5, cy - 13, high, 26, 7, 11, 2, ink);
   }
   if (font_active()) {
     // Right-aligned after the mark, with a below-zero minus as a short bar just before the digits
@@ -1249,8 +1039,8 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
   draw_digit(d1, y, w, h, minus_digit ? DIGIT_MINUS : (v >= 10) ? v / 10 % 10 : DIGIT_BLANK, ink);
   draw_digit(d2, y, w, h, v % 10, ink);
   if (neg && minus_before && v >= 10) {  // (clear of LO / HI, which is wider than an arrow)
-    if (s_settings.range_marks == MARKS_LOHI) fill(x + 15 + sx, cy - 1, 4, 3, ink, false);
-    else fill(x + 13 + sx, cy - 1, 6, 3, ink, false);
+    if (s_settings.range_marks == MARKS_LOHI) fill(x + 15, cy - 1, 4, 3, ink, false);
+    else fill(x + 13, cy - 1, 6, 3, ink, false);
   }
 }
 
@@ -1286,21 +1076,6 @@ static void draw_temperature_range(void) {
   draw_range_divider(RANGE_DIV_X, base - RANGE_DIGIT_H - 2, base + 1);
 }
 
-// A shake's burst of seconds is running. It also ends if the clock was set back meanwhile, so
-// it can never last longer than seconds_burst_s.
-static bool burst_active(void) {
-  if (s_burst_until == 0) return false;
-  const time_t now = time(NULL);
-  return now < s_burst_until && s_burst_until - now <= s_settings.seconds_burst_s;
-}
-
-// Seconds in the right box: always, or (seconds_on_shake) only during a burst after a wrist
-// shake, with the temperature there the rest of the time.
-static bool seconds_showing(void) {
-  if (!s_settings.show_seconds) return false;
-  return !s_settings.seconds_on_shake || burst_active();
-}
-
 // Viewfinder corners of the box x0..x1, y0..y1 (the ones in `corners`): arms `a` px long, `t` thick.
 enum { CORNER_TL = 1, CORNER_TR = 2, CORNER_BL = 4, CORNER_BR = 8 };
 static void draw_brackets(int x0, int x1, int y0, int y1, int corners, int a, int t, GColor c) {
@@ -1313,7 +1088,7 @@ static void draw_brackets(int x0, int x1, int y0, int y1, int corners, int a, in
   }
 }
 
-// The lines between the time and the bottom row and between the date box and the right box, in
+// The lines between the time and the bottom row and between its two boxes, in
 // the chosen style.
 static void draw_rules(void) {
   const GColor c = s_col[COL_RULES];
@@ -1358,7 +1133,6 @@ static void draw_rules(void) {
 // The window edge styles of their own, on both edges (`top` and `bottom` are the 2 px bands' first
 // rows). Outward means into the case, inward into the LCD.
 static void draw_lcd_edge_style(GColor c, int top, int bottom) {
-  const int cx = LCD_W / 2;
   switch (s_settings.edge_style) {
     case EDGE_TAB: {  // a 2 px line that steps 4 px out into the case around a raised centre section
       const int x0 = 66, x1 = LCD_W - 66, rise = 4;
@@ -1388,24 +1162,6 @@ static void draw_lcd_edge_style(GColor c, int top, int bottom) {
           fill(6 - i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
           fill(LCD_W - 7 + i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
         }
-      }
-      break;
-    case EDGE_CIRCUIT:  // a hairline with square nodes on it, like a circuit trace
-      for (int e = 0; e < 2; e++) {
-        const int line = e ? bottom : top + 1;
-        fill(LCD_X, line, LCD_W, 1, c, false);
-        for (int x = 18; x < LCD_W; x += 40) fill(x, line - 2, 5, 5, c, false);
-      }
-      break;
-    case EDGE_DOUBLE:  // two hairlines, broken by a diamond in the middle
-      for (int e = 0; e < 2; e++) {
-        const int y = e ? bottom : top - 1;  // the outer line (the inner one is 2 px closer)
-        for (int k = 0; k < 2; k++) {
-          fill(LCD_X, y + 2 * k, cx - 7, 1, c, false);
-          fill(cx + 7, y + 2 * k, LCD_W - cx - 7, 1, c, false);
-        }
-        for (int i = 0; i < 4; i++) fill(cx - i, y + 1 - 3 + i, 2 * i + 1, 1, c, false);  // upper half
-        for (int i = 0; i < 3; i++) fill(cx - i, y + 1 + 3 - i, 2 * i + 1, 1, c, false);  // lower half
       }
       break;
     default:
@@ -1463,21 +1219,17 @@ static void draw_lcd_edges(void) {
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
   draw_lcd_edges();
-  const int day_x = s_settings.date_range ? WEEKDAY_NARROW_X : WEEKDAY_X;
   if (font_active()) {  // centred on the indicators' row (2 px left: the letters have side bearings)
-    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], day_x - 2, 0, font_weekday_base(), ALIGN_LEFT,
+    font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], WEEKDAY_X - 2, 0, font_weekday_base(), ALIGN_LEFT,
                    s_col[COL_WEEKDAY], DENSITY_FULL);
   } else {
-    draw_day(day_x, WEEKDAY_Y, DAYS[s_now.tm_wday], s_settings.date_range, s_col[COL_WEEKDAY]);
+    draw_day(WEEKDAY_X, WEEKDAY_Y, DAYS[s_now.tm_wday], s_col[COL_WEEKDAY]);
   }
-  if (s_settings.date_range) draw_month_day();
-  if (s_settings.indicator_style == IND_GRID) draw_indicator_frame();
+  draw_month_day();
   draw_time();
   draw_rules();
-  if (s_settings.date_range) draw_temperature_range();
-  else draw_date();
-  if (seconds_showing()) draw_seconds();
-  else draw_temperature();
+  draw_temperature_range();
+  draw_temperature();
 }
 
 // A small 1-bit picture ('#' = ink), drawn pixel by pixel through the graphics API.
@@ -1545,40 +1297,29 @@ static void draw_top_bezel(GContext *ctx) {
   draw_text(ctx, left, GRect(left_x, -2, right_start - left_x - 4, 22), GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
-// Bottom bezel (larger text): the WR badge (or HR badge and heart rate) and the
-// custom label.
+// Bottom bezel (larger text): a heart and the latest heart rate, and the custom label.
 static void draw_bottom_bezel(GContext *ctx) {
-  if (s_settings.heart_rate) {  // a heart and the latest heart rate
-    static const char *const HEART[] = {
-      "..###...###..", ".#####.#####.", "#############", "#############", "#############",
-      ".###########.", "..#########..", "...#######...", "....#####....", ".....###.....", "......#......",
-    };
-    draw_icon(ctx, 12, BOTTOM_CAP + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
-    char hr_text[12];
-    if (s_hr > 0) snprintf(hr_text, sizeof(hr_text), "%d", s_hr);
-    else snprintf(hr_text, sizeof(hr_text), "--");
-    draw_bezel_text(ctx, hr_text, 30, BOTTOM_CAP, 50, GTextAlignmentLeft, s_col[COL_HEART]);
-  } else {  // the water resistance badge
-    graphics_context_set_stroke_color(ctx, s_col[COL_BADGE]);
-    graphics_draw_round_rect(ctx, GRect(10, BOTTOM_CAP - 3, 30, 20), 3);
-    draw_bezel_text(ctx, "WR", 10, BOTTOM_CAP, 30, GTextAlignmentCenter, s_col[COL_BADGE]);
-  }
+  static const char *const HEART[] = {
+    "..###...###..", ".#####.#####.", "#############", "#############", "#############",
+    ".###########.", "..#########..", "...#######...", "....#####....", ".....###.....", "......#......",
+  };
+  draw_icon(ctx, 12, BOTTOM_CAP + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
+  char hr_text[12];
+  if (s_hr > 0) snprintf(hr_text, sizeof(hr_text), "%d", s_hr);
+  else snprintf(hr_text, sizeof(hr_text), "--");
+  draw_bezel_text(ctx, hr_text, 30, BOTTOM_CAP, 50, GTextAlignmentLeft, s_col[COL_HEART]);
   draw_bezel_text(ctx, s_settings.bezel_label, 82, BOTTOM_CAP, 108, GTextAlignmentRight,
                   s_col[COL_LABEL]);
 }
 
-// One indicator: its label, whether it is on, its colour when on, and its cell in the grid
-// (with the widths of its letters when they are stretched there).
+// One indicator: its label, whether it is on, and its colour when on.
 typedef struct {
   const char *label;
   bool on;
   GColor ink;
-  GRect cell;
-  const int8_t *letter_w;
-  int letter_w_n;
 } Indicator;
 
-// The area the indicator styles share (the grid's box).
+// The top-left corner of the area the indicator styles share.
 #define IND_X0 107
 #define IND_Y0 34
 
@@ -1588,7 +1329,7 @@ static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell
   const GColor color = ind->on ? ind->ink : s_ghost;
   const int density = ind->on ? DENSITY_FULL : s_label_off_density;
   if (!font_active()) {
-    draw_fitted_text(ctx, ind->label, cell, ind->letter_w, ind->letter_w_n, LABEL_H, color, density, right);
+    draw_fitted_text(ctx, ind->label, cell, LABEL_H, color, density, right);
     return;
   }
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
@@ -1615,7 +1356,7 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_H 13
 #define PILL_R 5
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // Grid order, as in the box: CHG and MUTE on the left, BT and DST on the right.
+  // CHG and MUTE on the left, BT and DST on the right.
   static const uint8_t SLOT[4][2] = { { 44, 0 }, { 1, 0 }, { 44, 15 }, { 1, 15 } };  // BT, CHG, DST, MUTE
   for (int i = 0; i < 4; i++) {
     if (!ind[i].on && !s_settings.ghosts) continue;
@@ -1690,52 +1431,26 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
   }
 }
 
-// The indicator box's labels: lit (ink) when active, faint otherwise. DST is lit while daylight
-// saving time is in effect in the watch's time zone (the phone provides the zone; the watch's
-// own clock knows when DST applies). Each is fitted to LABEL_H rows and centred vertically in
-// its cell (the cells are the rows between the 2px frame and the middle divider); "BT" is also
-// widened. Active labels gather on the right (BT, DST), the usually inactive ones on the left
-// (CHG, MUTE). The BT and MUTE cells stop 1px short of the rounded corners that intrude.
-static void draw_indicator_labels(GContext *ctx) {
-  const int top_h = BOX_MID - BOX_TOP - 2, bottom_h = BOX_BOTTOM - BOX_MID - 2;
-  const int left_w = BOX_DIV - BOX_LEFT, right_w = BOX_RIGHT - BOX_DIV;
-  static const int8_t BT_WIDTHS[] = { 8, 9 };  // widened B and T
+// The indicators, in the chosen style: lit (ink) when active, faint otherwise. DST is lit while
+// daylight saving time is in effect in the watch's time zone (the phone provides the zone; the
+// watch's own clock knows when DST applies).
+static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   const bool pm_cell = !is_24h() && s_settings.pm_in_box;
-  // In the order BT, CHG (or PM), DST, MUTE; `cell` is the grid's.
-  Indicator ind[] = {
-    { "BT",   s_connected, s_col[COL_BT],
-      GRect(BOX_DIV + 1, BOX_TOP + 2, right_w - 4, top_h), BT_WIDTHS, ARRAY_LENGTH(BT_WIDTHS) },
+  // In the order BT, CHG (or PM), DST, MUTE.
+  const Indicator ind[] = {
+    { "BT",   s_connected, s_col[COL_BT] },
     // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
     { pm_cell ? "PM" : full ? "FULL" : "CHG", pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full,
-      pm_cell ? s_col[COL_PM] : s_col[COL_CHG],
-      GRect(BOX_LEFT + 2, BOX_TOP + 2, left_w - 3, top_h), NULL, 0 },
-    { "DST",  s_now.tm_isdst > 0, s_col[COL_DST],
-      GRect(BOX_DIV + 1, BOX_MID + 1, right_w - 2, bottom_h), NULL, 0 },
-    { "MUTE", s_quiet, s_col[COL_MUTE],
-      GRect(BOX_LEFT + 4, BOX_MID + 1, left_w - 4, bottom_h), NULL, 0 },
+      pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
+    { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
+    { "MUTE", s_quiet, s_col[COL_MUTE] },
   };
   switch (s_settings.indicator_style) {
-    case IND_PILLS:  draw_indicator_pills(ctx, ind); break;
     case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
     case IND_ICONS:  draw_indicator_icons(ctx, ind, pm_cell); break;
-    default:  // the grid
-      for (unsigned i = 0; i < ARRAY_LENGTH(ind); i++) {
-        if (!ind[i].on && !s_settings.ghosts) continue;
-        draw_indicator_label(ctx, &ind[i], ind[i].cell, false);
-      }
-  }
-}
-
-// The charcoal case: dark gray dots over the black, on rows y0..y1, `density` out of DENSITY_FULL
-// with the same ordered dither as the ghosts (8 = a checkerboard).
-static void draw_case_pattern(int y0, int y1, int density) {
-  for (int y = y0; y <= y1; y++) {
-    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y);
-    for (int x = row.min_x; x <= row.max_x; x++) {
-      if (BAYER4[y & 3][x & 3] < density) row.data[x] = GColorDarkGrayARGB8;
-    }
+    default:         draw_indicator_pills(ctx, ind);
   }
 }
 
@@ -1753,11 +1468,8 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_lcd);
   graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y, LCD_W, LCD_H), 0, GCornerNone);
   // A black LCD (inverted) would melt into a plain black case: mark the panel's edges. (With
-  // custom colours the edge is a colour of its own; a charcoal case stands apart by itself.)
-  // COL_CASE's custom colour is no longer offered: the case is always Case color.
-  const bool charcoal = !s_settings.silver && s_settings.case_pattern != CASE_SOLID;
-  if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 &&
-      !charcoal && plain_edge) {
+  // custom colours the edge is a colour of its own.)
+  if (!s_colors.enabled && s_settings.inverted && s_col[COL_CASE].argb == GColorBlackARGB8 && plain_edge) {
     graphics_context_set_fill_color(ctx, GColorDarkGray);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y - 1, LCD_W, 1), 0, GCornerNone);
     graphics_fill_rect(ctx, GRect(LCD_X, LCD_Y + LCD_H, LCD_W, 1), 0, GCornerNone);
@@ -1766,11 +1478,6 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   s_quiet = quiet_time_is_active();
   s_fb = graphics_capture_frame_buffer(ctx);
   if (!s_fb) return;
-  if (charcoal) {
-    const int band = plain_edge ? 2 : 0;  // without the plain edge, the case runs up to the LCD
-    draw_case_pattern(0, LCD_Y - 1 - band, s_settings.case_pattern * 4);
-    draw_case_pattern(LCD_Y + LCD_H + band, PBL_DISPLAY_HEIGHT - 1, s_settings.case_pattern * 4);
-  }
   draw_lcd();
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
@@ -1779,7 +1486,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // is released.
   draw_top_bezel(ctx);
   draw_bottom_bezel(ctx);
-  draw_indicator_labels(ctx);
+  draw_indicators(ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1792,81 +1499,21 @@ static void request_weather(void) {
   app_message_outbox_send();
 }
 
-// Asks the phone for weather only when it would be shown and used: the temperature is on
-// screen (not the seconds), the phone is connected, and the last reading is not recent.
-// Each request wakes the phone app for a location fix and a web request.
+// Asks the phone for weather only when the phone is connected and the last reading is not
+// recent. Each request wakes the phone app for a location fix and a web request.
 static void refresh_weather_if_needed(void) {
-  // The temperature is on screen unless the seconds are always shown (and the date box shows
-  // the date).
-  if ((s_settings.show_seconds && !s_settings.seconds_on_shake && !s_settings.date_range) ||
-      !s_connected) return;
+  if (!s_connected) return;
   // A recent reading is enough, except when the high and low on screen belong to yesterday.
-  const bool stale_range = s_settings.date_range && !range_valid();
-  if (!stale_range && s_weather.updated != 0 &&
-      time(NULL) - s_weather.updated < (WEATHER_REFRESH_MIN - 5) * 60) return;
+  if (range_valid() && time(NULL) - s_weather.updated < (WEATHER_REFRESH_MIN - 5) * 60) return;
   request_weather();
 }
 
-static void tick_handler(struct tm *now, TimeUnits changed);
-
-// Once a minute normally (plus the hour, so a whole-hour time zone change redraws at once);
-// every second only while the seconds are shown AND the face is in front.
-static void subscribe_ticks(void) {
-  tick_timer_service_unsubscribe();
-  const bool per_second = seconds_showing() && s_focus;
-  tick_timer_service_subscribe(per_second ? SECOND_UNIT : (MINUTE_UNIT | HOUR_UNIT), tick_handler);
-}
-
-// A wrist shake: start (or extend) the burst of ticking seconds.
-static void start_seconds_burst(void) {
-  if (!s_focus || !s_settings.show_seconds || !s_settings.seconds_on_shake) return;
-  s_burst_until = time(NULL) + s_settings.seconds_burst_s;
-  subscribe_ticks();
-  time_t now = time(NULL);
-  s_now = *localtime(&now);
-  layer_mark_dirty(s_canvas);
-}
-
-static void shake_handler(AccelAxisType axis, int32_t direction) { start_seconds_burst(); }
-
-// The accelerometer's shake detection (the SDK calls it the "tap" service) is only listened to
-// while the setting needs it.
-static void update_shake_subscription(void) {
-  accel_tap_service_unsubscribe();
-  if (s_settings.show_seconds && s_settings.seconds_on_shake) {
-    accel_tap_service_subscribe(shake_handler);
-  } else {
-    s_burst_until = 0;
-  }
-}
-
-// A notification or menu covering the face makes per-second redraws pointless.
-static void focus_handler(bool in_focus) {
-  s_focus = in_focus;
-  subscribe_ticks();
-  if (in_focus) {
-    time_t now = time(NULL);
-    s_now = *localtime(&now);
-    layer_mark_dirty(s_canvas);
-  }
-}
-
+// Once a minute (the hour too, so a whole-hour time zone change redraws at once).
 static void tick_handler(struct tm *now, TimeUnits changed) {
   s_now = *now;
-  if (s_burst_until != 0 && !burst_active()) {
-    s_burst_until = 0;      // the burst is over: back to a tick a minute and the temperature
-    subscribe_ticks();
-  }
-  if (changed & MINUTE_UNIT) {
-    if (s_settings.show_steps) update_steps();
-    if (now->tm_min % WEATHER_REFRESH_MIN == 0) refresh_weather_if_needed();
-  }
+  if (s_settings.show_steps) update_steps();
+  if (now->tm_min % WEATHER_REFRESH_MIN == 0) refresh_weather_if_needed();
   layer_mark_dirty(s_canvas);
-  // The hourly vibration: on the hour, while the face is showing, never during Quiet Time.
-  if (now->tm_min == 0 && now->tm_sec == 0 && s_settings.hourly_vibe == HOURLY_VIBE_ON &&
-      !quiet_time_is_active()) {
-    vibes_double_pulse();
-  }
 }
 
 static void battery_handler(BatteryChargeState state) {
@@ -1918,17 +1565,6 @@ static void health_handler(HealthEventType event, void *context) {
 }
 #endif
 
-// Health events wake the app, so they are only listened to while the heart rate is shown. (The
-// step count is read on the minute tick, which redraws the face anyway.)
-static void update_health_subscription(void) {
-#if defined(PBL_HEALTH)
-  health_service_events_unsubscribe();
-  if (s_settings.heart_rate) {
-    update_heart_rate();
-    health_service_events_subscribe(health_handler, NULL);
-  }
-#endif
-}
 
 // Reads a preset colour such as "FFA020" into *rgb. Returns false, leaving *rgb
 // alone, unless it is exactly six hex digits.
@@ -2008,18 +1644,9 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.time_format = strcmp(f, "12") == 0 ? FORMAT_12H : strcmp(f, "24") == 0 ? FORMAT_24H : FORMAT_AUTO;
     settings_changed = true;
   }
-  if ((t = dict_find(iter, MESSAGE_KEY_DateFormat))) {
-    // "DM" or "MD", or "minmax": today's low and high in the date box (the day of the month
-    // moves up next to the weekday; day_first keeps its last value for when the date returns).
-    const char *f = t->value->cstring;
-    s_settings.date_range = strcmp(f, "minmax") == 0 ? 1 : 0;
-    if (!s_settings.date_range) s_settings.day_first = strcmp(f, "DM") == 0;
-    settings_changed = true;
-  }
   if ((t = dict_find(iter, MESSAGE_KEY_EdgeStyle))) {
     const char *v = t->value->cstring;
-    s_settings.edge_style = strcmp(v, "tab") == 0 ? EDGE_TAB : strcmp(v, "notched") == 0 ? EDGE_NOTCHED
-        : strcmp(v, "circuit") == 0 ? EDGE_CIRCUIT : strcmp(v, "double") == 0 ? EDGE_DOUBLE : EDGE_MATCH;
+    s_settings.edge_style = strcmp(v, "tab") == 0 ? EDGE_TAB : strcmp(v, "notched") == 0 ? EDGE_NOTCHED : EDGE_MATCH;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_RangeMarks))) {
@@ -2030,31 +1657,16 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   }
   if ((t = dict_find(iter, MESSAGE_KEY_IndicatorStyle))) {
     const char *v = t->value->cstring;
-    s_settings.indicator_style = strcmp(v, "pills") == 0 ? IND_PILLS : strcmp(v, "active") == 0 ? IND_ACTIVE
-        : strcmp(v, "icons") == 0 ? IND_ICONS : IND_GRID;
+    s_settings.indicator_style = strcmp(v, "active") == 0 ? IND_ACTIVE : strcmp(v, "icons") == 0 ? IND_ICONS
+        : IND_PILLS;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_TimeZero12))) {
-    s_settings.pm_in_box = tuple_int(t) ? 1 : 0;
+    s_settings.pm_in_box = tuple_int(t) != 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_TimeZero))) {
-    s_settings.hour_no_zero = tuple_int(t) ? 0 : 1;
-    settings_changed = true;
-  }
-  // Right box
-  if ((t = dict_find(iter, MESSAGE_KEY_RightBox))) {
-    s_settings.show_seconds = strcmp(t->value->cstring, "seconds") == 0;
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_SecondsMode))) {
-    s_settings.seconds_on_shake = strcmp(t->value->cstring, "shake") == 0 ? 1 : 0;
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_SecondsDuration))) {
-    int v = tuple_int(t);
-    s_settings.seconds_burst_s = v < SECONDS_BURST_MIN_S ? SECONDS_BURST_MIN_S
-        : v > SECONDS_BURST_MAX_S ? SECONDS_BURST_MAX_S : v;
+    s_settings.hour_no_zero = tuple_int(t) == 0;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_TempUnit))) {
@@ -2080,10 +1692,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     settings_changed = true;
   }
   // Bottom bezel
-  if ((t = dict_find(iter, MESSAGE_KEY_HeartRate))) {
-    s_settings.heart_rate = tuple_int(t);
-    settings_changed = true;
-  }
   if ((t = dict_find(iter, MESSAGE_KEY_BezelLabel))) {
     copy_upper(s_settings.bezel_label, sizeof(s_settings.bezel_label), t->value->cstring);
     settings_changed = true;
@@ -2107,16 +1715,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   if ((t = dict_find(iter, MESSAGE_KEY_CaseColor))) {
     const char *c = t->value->cstring;
     s_settings.silver = strcmp(c, "silver") == 0;
-    s_settings.case_pattern = strcmp(c, "dots") == 0 ? CASE_DOTS
-        : strcmp(c, "checker") == 0 ? CASE_CHECKER : CASE_SOLID;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_Inverted))) {
     s_settings.inverted = tuple_int(t);
-    settings_changed = true;
-  }
-  if ((t = dict_find(iter, MESSAGE_KEY_Slanted))) {
-    s_settings.slanted = tuple_int(t);
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_Ghosts))) {
@@ -2147,10 +1749,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.vibe_connect = (v >= 0 && v < VIBE_COUNT) ? v : VIBE_NONE;
     settings_changed = true;
   }
-  if ((t = dict_find(iter, MESSAGE_KEY_HourlyVibe))) {
-    s_settings.hourly_vibe = tuple_int(t) ? HOURLY_VIBE_ON : 0;
-    settings_changed = true;
-  }
 
   // Custom colors (the picker sends 0xRRGGBB; the display keeps the nearest of its 64 colours)
   if ((t = dict_find(iter, MESSAGE_KEY_CustomColors))) {
@@ -2173,9 +1771,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     if (font_changed) load_digit_font();
     apply_theme();
     apply_backlight();
-    update_shake_subscription();
-    update_health_subscription();
-    subscribe_ticks();
     if (s_settings.show_steps) update_steps();
     refresh_weather_if_needed();
   }
@@ -2198,37 +1793,23 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   s_settings = (Settings){
-    .day_first = true,
     .show_battery = true,
     .top_left = "30 DAY BATT",
     .show_steps = true,
     .top_right = "WR 3ATM",
     .bezel_label = "PEBBLE",
-    .slanted = true,
     .ghosts = true,
     .backlight = BACKLIGHT_SYSTEM,
     .vibe_disconnect = VIBE_DOUBLE,
     .vibe_connect = VIBE_SHORT,
-    .seconds_burst_s = SECONDS_BURST_DEFAULT_S,
   };
-  // Settings saved by older versions are shorter: the fields added at the end keep their defaults.
   persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
-  // Old saves left padding where these two now live.
-  if (s_settings.seconds_on_shake > 1) s_settings.seconds_on_shake = 0;
-  if (s_settings.hour_no_zero > 1) s_settings.hour_no_zero = 0;
-  if (s_settings.date_range > 1) s_settings.date_range = 0;
-  if (s_settings.case_pattern > CASE_CHECKER) s_settings.case_pattern = CASE_SOLID;
   if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;
   if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
-  if (s_settings.pm_in_box > 1) s_settings.pm_in_box = 0;
-  if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_GRID;
-  if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   if (s_settings.edge_style >= EDGE_COUNT) s_settings.edge_style = EDGE_MATCH;
+  if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_PILLS;
+  if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   load_digit_font();
-  if (s_settings.hourly_vibe != HOURLY_VIBE_ON) s_settings.hourly_vibe = 0;  // the chime's sounds are gone
-  if (s_settings.seconds_burst_s < SECONDS_BURST_MIN_S || s_settings.seconds_burst_s > SECONDS_BURST_MAX_S) {
-    s_settings.seconds_burst_s = SECONDS_BURST_DEFAULT_S;
-  }
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
   if (s_weather.has_range > 1) s_weather.has_range = 0;
   s_colors.enabled = 0;
@@ -2248,13 +1829,14 @@ static void init(void) {
   window_set_window_handlers(s_window, (WindowHandlers){ .load = window_load, .unload = window_unload });
   window_stack_push(s_window, true);
 
-  update_shake_subscription();
-  subscribe_ticks();
+  tick_timer_service_subscribe(MINUTE_UNIT | HOUR_UNIT, tick_handler);
   battery_state_service_subscribe(battery_handler);
-  app_focus_service_subscribe(focus_handler);
   connection_service_subscribe(
       (ConnectionHandlers){ .pebble_app_connection_handler = connection_handler });
-  update_health_subscription();
+#if defined(PBL_HEALTH)
+  update_heart_rate();
+  health_service_events_subscribe(health_handler, NULL);
+#endif
 
   app_message_register_inbox_received(inbox_handler);
   // The inbox must hold a full settings Save: about 230 bytes with plain text and over 400
@@ -2266,8 +1848,6 @@ static void init(void) {
 static void deinit(void) {
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
-  app_focus_service_unsubscribe();
-  accel_tap_service_unsubscribe();
   connection_service_unsubscribe();
 #if defined(PBL_HEALTH)
   health_service_events_unsubscribe();

@@ -21,8 +21,6 @@ function colorItem(key, label, defaultValue) {
 
 module.exports = [
   { "type": "heading", "defaultValue": "LCD 221" },
-  // Filled in by custom-clay.js from GitHub when the page opens.
-  { "type": "text", "id": "commitInfo", "defaultValue": "Latest commit: checking GitHub..." },
   {
     "type": "section",
     "items": [
@@ -51,19 +49,11 @@ module.exports = [
       },
       {
         "type": "toggle", "messageKey": "TimeZero12", "label": "Leading zero in 12-hour time", "defaultValue": false,
-        "description": "Shows 07:05 instead of 7:05. The P beside the hours makes way: PM is shown in the indicator box instead, in place of CHG (the battery icon shows a bolt while charging)."
-      },
-      {
-        "type": "select", "messageKey": "DateFormat", "label": "Date format", "defaultValue": "DM",
-        "description": "Min / max shows today's low and high temperature, for where your phone is, in place of the date, and the day of the month moves up next to the weekday (MON 05).",
-        "options": [
-          { "label": "DD-MM", "value": "DM" },
-          { "label": "MM-DD", "value": "MD" },
-          { "label": "Min / max temperature (MON 05)", "value": "minmax" }
-        ]
+        "description": "Shows 07:05 instead of 7:05. The P beside the hours makes way: PM is shown with the indicators instead, in place of CHG (the battery icon shows a bolt while charging)."
       },
       {
         "type": "select", "messageKey": "RangeMarks", "label": "Min / max marks", "defaultValue": "tall",
+        "description": "The bottom row shows today's low and high temperature, for where your phone is.",
         "options": [
           { "label": "Tall arrows", "value": "tall" },
           { "label": "Triangles", "value": "triangles" },
@@ -75,16 +65,7 @@ module.exports = [
   {
     "type": "section",
     "items": [
-      { "type": "heading", "defaultValue": "Right box" },
-      {
-        "type": "select", "messageKey": "RightBox", "label": "Right box shows",
-        "defaultValue": "temperature",
-        "description": "Seconds redraw the watch face every second, which uses more battery.",
-        "options": [
-          { "label": "Temperature", "value": "temperature" },
-          { "label": "Seconds", "value": "seconds" }
-        ]
-      },
+      { "type": "heading", "defaultValue": "Temperature" },
       {
         "type": "select", "messageKey": "TempUnit", "label": "Temperature unit",
         "defaultValue": "auto",
@@ -94,19 +75,6 @@ module.exports = [
           { "label": "Celsius", "value": "C" },
           { "label": "Fahrenheit", "value": "F" }
         ]
-      },
-      {
-        "type": "select", "messageKey": "SecondsMode", "label": "Seconds ticking", "defaultValue": "always",
-        "description": "Shake your wrist to start the seconds. When they are not ticking, the right box shows the temperature.",
-        "options": [
-          { "label": "Always", "value": "always" },
-          { "label": "After a wrist shake", "value": "shake" }
-        ]
-      },
-      {
-        "type": "slider", "messageKey": "SecondsDuration", "label": "Seconds duration (s)", "defaultValue": 30,
-        "min": 5, "max": 120, "step": 5,
-        "description": "How long the seconds keep ticking after a shake."
       }
     ]
   },
@@ -139,11 +107,6 @@ module.exports = [
     "items": [
       { "type": "heading", "defaultValue": "Bottom bezel" },
       {
-        "type": "toggle", "messageKey": "HeartRate", "label": "Show heart rate",
-        "defaultValue": false,
-        "description": "Replaces the WR badge with HR and your latest heart rate."
-      },
-      {
         "type": "input", "messageKey": "BezelLabel", "label": "Label", "defaultValue": "PEBBLE",
         "description": "Text on the right of the bottom bezel, shown in capitals. Leave empty for none.",
         "attributes": { "maxlength": 12, "autocapitalize": "characters" }
@@ -158,9 +121,7 @@ module.exports = [
         "type": "select", "messageKey": "CaseColor", "label": "Case color", "defaultValue": "black",
         "options": [
           { "label": "Black", "value": "black" },
-          { "label": "Silver", "value": "silver" },
-          { "label": "Charcoal (dotted)", "value": "dots" },
-          { "label": "Charcoal (checkerboard)", "value": "checker" }
+          { "label": "Silver", "value": "silver" }
         ]
       },
       {
@@ -195,24 +156,17 @@ module.exports = [
         "options": [
           { "label": "Match the dividers", "value": "match" },
           { "label": "Center tab", "value": "tab" },
-          { "label": "Notched", "value": "notched" },
-          { "label": "Circuit", "value": "circuit" },
-          { "label": "Double line", "value": "double" }
+          { "label": "Notched", "value": "notched" }
         ]
       },
       {
-        "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "grid",
+        "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "pills",
         "description": "How BT, CHG, DST and MUTE are shown next to the weekday.",
         "options": [
-          { "label": "Grid", "value": "grid" },
           { "label": "Pills", "value": "pills" },
           { "label": "Active only", "value": "active" },
           { "label": "Icons", "value": "icons" }
         ]
-      },
-      {
-        "type": "toggle", "messageKey": "Slanted", "label": "Slanted digits", "defaultValue": true,
-        "description": "Lean the digits like the original watch. Straight digits are sharper."
       },
       {
         "type": "toggle", "messageKey": "Ghosts", "label": "Show unlit segments",
@@ -254,7 +208,7 @@ module.exports = [
       colorHeading("Bezels"),
       colorItem("ColTopLeft", "Top bezel, left text", "ffffff"),
       colorItem("ColTopRight", "Top bezel, right text", "ffffff"),
-      colorItem("ColBadge", "Bottom bezel, WR / HR badge", "ffffff"),
+      colorItem("ColBadge", "Bottom bezel, heart", "ffffff"),
       colorItem("ColHeart", "Bottom bezel, heart rate", "ffffff"),
       colorItem("ColLabel", "Bottom bezel, label", "ffffff"),
       colorHeading("LCD panel"),
@@ -262,8 +216,7 @@ module.exports = [
       colorItem("ColLcd", "LCD background", "ffffff"),
       colorItem("ColUnlit", "Unlit segments and labels", "aaaaaa"),
       colorHeading("Weekday and indicators"),
-      colorItem("ColWeekday", "Weekday", "000000"),
-      colorItem("ColFrame", "Indicator box outline", "000000"),
+      colorItem("ColWeekday", "Weekday and day", "000000"),
       colorItem("ColBt", "BT", "000000"),
       colorItem("ColChg", "CHG / FULL", "000000"),
       colorItem("ColDst", "DST", "000000"),
@@ -273,10 +226,10 @@ module.exports = [
       colorItem("ColColon", "Colon", "000000"),
       colorItem("ColMinutes", "Minute digits", "000000"),
       colorItem("ColPm", "PM marker", "000000"),
-      colorHeading("Date and right box"),
-      colorItem("ColDate", "Date / min-max temperature", "000000"),
+      colorHeading("Bottom row"),
+      colorItem("ColDate", "Low / high temperature", "000000"),
       colorItem("ColRules", "Divider lines", "000000"),
-      colorItem("ColRight", "Temperature / seconds", "000000")
+      colorItem("ColRight", "Temperature", "000000")
     ]
   },
   {
@@ -293,10 +246,6 @@ module.exports = [
         "defaultValue": "1",
         "description": "No vibration during Quiet Time.",
         "options": VIBE_PATTERNS
-      },
-      {
-        "type": "toggle", "messageKey": "HourlyVibe", "label": "Vibrate on the hour", "defaultValue": false,
-        "description": "A double pulse at the top of every hour while this watch face is showing. Not during Quiet Time."
       }
     ]
   },

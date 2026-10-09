@@ -1,20 +1,12 @@
-New: the date box can show today's high and low temperature instead of the date (Time & date > Date format > Min / max temperature), from the same Open-Meteo weather as the current temperature. The day of the month then moves up next to the weekday (MON05).
-Changed: the DST indicator moved into the indicator box, in place of SIG.
-Removed: the hourly chime's sounds. "Vibrate on the hour" replaces it (a chime set to vibration only keeps vibrating).
-New: two charcoal case colors, dotted and checkerboard, which set a black (inverted) LCD apart from the case.
+New: today's low and high temperature in the bottom row, from the same Open-Meteo weather as the current temperature, with the day of the month next to the weekday (MON 05). Min / max marks: tall arrows, triangles or LO / HI.
 New: Digit style: the 7-segment digits, or one of four condensed fonts (Condensed, Handjet, Angular, Big Shoulders Stencil) for all the text and numbers on the LCD.
 New: Divider lines: solid, segmented, ruler ticks, corner brackets or HUD chamfer.
-Changed: the top bar shows a battery icon and a walking figure instead of the words BATT and STEPS.
-Fixed: with corner brackets, the bottom row's numbers are centred between the brackets.
-New: Leading zero in 12-hour time (07:05), with PM in the indicator box in place of CHG.
-Changed: the LCD window edges follow the divider line style, and the bottom row is centred between the divider and the bottom of the LCD.
-Fixed: the face is centred left to right (the font clocks sat a little left), and with corner brackets the LCD's edge has brackets only at its corners.
-Fixed: with a divider style other than Solid, the plain LCD window edge (visible with custom colors or the silver case) is no longer drawn under the style's own edge.
-New: Indicators style: grid, pills, active only or icons.
-Changed: the heart rate shows a heart instead of HR; with corner brackets the LCD's corners are bolder, and the ruler-ticks edge is thicker.
-Fixed: with a font, the day of the month matches the weekday's size and both are centred on the indicators; the temperature is centred in its box.
-Changed: single-digit days and months always have a leading zero (05, 06-05); the Single-digit dates setting is gone.
-New: Min / max marks: tall arrows (new default), triangles (bigger than before) or LO / HI; below zero the minus goes before the number.
-New: Window edge style: match the dividers, center tab, notched, circuit or double line.
-Fixed: the custom LCD window edge colour now colours the styled edges too, not only the plain solid one.
+New: Window edge: match the dividers, center tab or notched, in the custom window edge colour.
+New: Indicators: pills, active only or icons. DST takes SIG's place.
+New: Leading zero in 12-hour time (07:05), with PM in place of CHG.
 New: a live preview at the top of the settings page shows the face with your changes before you Save.
+Changed: the top bar shows a battery icon (with a bolt while charging) and a walking figure instead of the words BATT and STEPS.
+Changed: the bottom bezel always shows a heart and your heart rate; the WR badge is gone.
+Changed: digits are always upright, and dates always have leading zeros.
+Removed: the date (DD-MM / MM-DD), the seconds, the hourly chime and vibration, the indicator grid, and the Slanted digits and Show heart rate settings.
+Note: this update resets your settings once; open the settings page and tap Save to restore them.

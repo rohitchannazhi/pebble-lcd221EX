@@ -25,29 +25,6 @@ module.exports = function () {
     timeFormat.on('change', syncHourZero);
     syncHourZero();
 
-    // The seconds mode only matters while the right box shows the seconds; the temperature
-    // unit while a temperature is shown: in the right box (which includes the idle time of
-    // "after a shake") or the high and low in the date box (the "Min / max" date format).
-    var rightBox = item('RightBox'), secondsMode = item('SecondsMode'), unit = item('TempUnit');
-    var duration = item('SecondsDuration'), dateFormat = item('DateFormat'), marks = item('RangeMarks');
-    function syncRightBox() {
-      var seconds = rightBox.get() === 'seconds', minmax = dateFormat.get() === 'minmax';
-      if (seconds) secondsMode.show(); else secondsMode.hide();
-      if (seconds && secondsMode.get() === 'shake') duration.show(); else duration.hide();
-      if (!seconds || secondsMode.get() === 'shake' || minmax) unit.show(); else unit.hide();
-      if (minmax) marks.show(); else marks.hide();
-    }
-    rightBox.on('change', syncRightBox);
-    secondsMode.on('change', syncRightBox);
-    dateFormat.on('change', syncRightBox);
-    syncRightBox();
-
-    // Slanted digits are a 7-segment thing; the fonts are upright.
-    var digitStyle = item('DigitStyle'), slanted = item('Slanted');
-    function syncDigits() { if (digitStyle.get() === 'segment') slanted.show(); else slanted.hide(); }
-    digitStyle.on('change', syncDigits);
-    syncDigits();
-
     // The colour picker only matters while "Custom color..." is the backlight choice.
     var backlight = item('BacklightColor'), custom = item('BacklightCustom');
     function syncCustom() { if (backlight.get() === 'custom') custom.show(); else custom.hide(); }
@@ -232,29 +209,6 @@ module.exports = function () {
         note.textContent = 'Preview unavailable: ' + e;
       });
     })();
-
-    // One line naming the latest commit on GitHub, to compare with the commit the installed build
-    // was made from (CloudPebble shows it). The page has no other way to know the build's commit.
-    var commitInfo = clayConfig.getItemById('commitInfo');
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'https://api.github.com/repos/rohitchannazhi/pebble-lcd221ex/commits/main');
-      xhr.onload = function () {
-        try {
-          var c = JSON.parse(xhr.responseText);
-          var when = new Date(c.commit.committer.date);
-          var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          commitInfo.set('Latest commit: ' + c.sha.substring(0, 7) + ' (' + when.getDate() + ' ' +
-                         months[when.getMonth()] + ' ' + when.getFullYear() + ')');
-        } catch (e) {
-          commitInfo.set('Latest commit: unavailable');
-        }
-      };
-      xhr.onerror = function () { commitInfo.set('Latest commit: unavailable (offline?)'); };
-      xhr.send();
-    } catch (e) {
-      commitInfo.set('Latest commit: unavailable');
-    }
 
     // Reset: every setting goes back to the defaultValue declared in config.js;
     // the user then taps Save. The change events above keep hidden fields in sync.
