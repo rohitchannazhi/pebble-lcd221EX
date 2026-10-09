@@ -225,6 +225,8 @@ void layer_set_update_proc(Layer *l, LayerUpdateProc p) {}
 void layer_add_child(Layer *a, Layer *b) {}
 void layer_destroy(Layer *l) {}
 int persist_read_data(uint32_t key, void *buf, size_t n) { return -1; }  // nothing saved: the defaults
+bool persist_exists(uint32_t key) { return false; }
+int persist_get_size(uint32_t key) { return -1; }
 int persist_write_data(uint32_t key, const void *buf, size_t n) { return (int)n; }
 Window *window_create(void) { return NULL; }
 void window_destroy(Window *w) {}

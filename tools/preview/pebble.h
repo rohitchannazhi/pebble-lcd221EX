@@ -87,6 +87,7 @@ typedef void (*LayerUpdateProc)(Layer*, GContext*);
 Layer *window_get_root_layer(Window*); Layer *layer_create(GRect); GRect layer_get_bounds(Layer*);
 void layer_set_update_proc(Layer*, LayerUpdateProc); void layer_add_child(Layer*, Layer*); void layer_destroy(Layer*);
 int persist_read_data(uint32_t, void*, size_t); int persist_write_data(uint32_t, const void*, size_t);
+bool persist_exists(uint32_t); int persist_get_size(uint32_t);
 Window *window_create(void); void window_destroy(Window*); void window_stack_push(Window*, bool);
 typedef struct { void (*load)(Window*); void (*unload)(Window*); } WindowHandlers; void window_set_window_handlers(Window*, WindowHandlers);
 void app_focus_service_subscribe(void (*)(bool)); void app_focus_service_unsubscribe(void);

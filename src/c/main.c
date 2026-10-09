@@ -23,9 +23,13 @@
 #include <pebble.h>
 #include "segments.h"
 
-#define SETTINGS_KEY 18  // bumped whenever Settings changes layout (older saves are then ignored)
+// Persistent storage keys. Each must differ from the others (and from any older value of another).
+#define SETTINGS_KEY 19  // bumped whenever Settings changes layout (older saves are then ignored)
+#define SETTINGS_KEY_SHARED 18  // a build saved Settings here by mistake, over the colours: see init()
 #define WEATHER_KEY 6  // bumped whenever Weather changes layout
 #define COLORS_KEY 18  // ColorSettings, persisted apart from Settings so old saves stay valid
+_Static_assert(SETTINGS_KEY != COLORS_KEY && SETTINGS_KEY != WEATHER_KEY && WEATHER_KEY != COLORS_KEY,
+               "two kinds of saved data share a key");
 #define WEATHER_MAX_AGE (3 * 60 * 60)
 #define WEATHER_REFRESH_MIN 30
 
@@ -2022,7 +2026,14 @@ static void init(void) {
     .vibe_disconnect = VIBE_DOUBLE,
     .vibe_connect = VIBE_SHORT,
   };
-  persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+  if (persist_exists(SETTINGS_KEY)) {
+    persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+  } else if (persist_get_size(SETTINGS_KEY_SHARED) == (int)sizeof(s_settings)) {
+    // Saved by the build that put Settings under the colours' key: moved to its own key. (The
+    // colours it overwrote are lost; they come back with the next Save on the settings page.)
+    persist_read_data(SETTINGS_KEY_SHARED, &s_settings, sizeof(s_settings));
+    persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+  }
   if (s_settings.digit_style >= DIGITS_COUNT) s_settings.digit_style = DIGITS_SEGMENT;
   if (s_settings.line_style >= LINES_COUNT) s_settings.line_style = LINES_SOLID;
   if (s_settings.edge_style >= EDGE_COUNT) s_settings.edge_style = EDGE_MATCH;
@@ -2034,7 +2045,8 @@ static void init(void) {
   if (s_weather.has_range > 1) s_weather.has_range = 0;
   s_colors.enabled = 0;
   memcpy(s_colors.argb, COLOR_DEFAULTS, sizeof(s_colors.argb));
-  persist_read_data(COLORS_KEY, &s_colors, sizeof(s_colors));
+  // (Only data of the colours' own size: the key once held Settings by mistake.)
+  if (persist_get_size(COLORS_KEY) == (int)sizeof(s_colors)) persist_read_data(COLORS_KEY, &s_colors, sizeof(s_colors));
   if (s_colors.enabled > 1) s_colors.enabled = 0;
   apply_theme();
   apply_backlight();
