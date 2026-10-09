@@ -186,13 +186,16 @@ size_t resource_load(ResHandle h, uint8_t *buf, size_t n) {
 bool clock_is_24h_style(void) { return s_24h; }
 bool quiet_time_is_active(void) { return false; }
 bool speaker_is_muted(void) { return false; }
-BatteryChargeState battery_state_service_peek(void) { return (BatteryChargeState){ .charge_percent = 80 }; }
+static int s_sample_battery = 80, s_sample_steps = 5234;  // see preview_sample()
+BatteryChargeState battery_state_service_peek(void) {
+  return (BatteryChargeState){ .charge_percent = s_sample_battery };
+}
 bool connection_service_peek_pebble_app_connection(void) { return true; }
 HealthServiceAccessibilityMask health_service_metric_accessible(HealthMetric m, time_t a, time_t b) {
   return HealthServiceAccessibilityMaskAvailable;
 }
 HealthValue health_service_peek_current_value(HealthMetric m) { return 72; }
-HealthValue health_service_sum_today(HealthMetric m) { return 5234; }
+HealthValue health_service_sum_today(HealthMetric m) { return s_sample_steps; }
 MeasurementSystem health_service_get_measurement_system_for_display(HealthMetric m) { return 0; }
 time_t time_start_of_today(void) { return s_time - (s_tm.tm_hour * 60 + s_tm.tm_min) * 60 - s_tm.tm_sec; }
 bool health_service_events_subscribe(HealthEventHandler h, void *c) { return true; }
@@ -284,6 +287,12 @@ static Tuple *add_entry(void) {
 
 __attribute__((export_name("preview_str"))) char *preview_str(void) { return s_str; }
 __attribute__((export_name("preview_fb"))) uint8_t *preview_fb(void) { return &FB[0][0]; }
+
+// Other sample readings (for screenshots and tests), before preview_init().
+__attribute__((export_name("preview_sample"))) void preview_sample(int battery, int steps) {
+  s_sample_battery = battery;
+  s_sample_steps = steps;
+}
 
 // Starts the face as on the watch with nothing saved, with a sample temperature and range.
 __attribute__((export_name("preview_init"))) void preview_init(void) {

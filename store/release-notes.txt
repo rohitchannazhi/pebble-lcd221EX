@@ -5,7 +5,7 @@ New: Window edge: match the dividers, center tab or notched, in the custom windo
 New: Indicators: pills, active only or icons. DST takes SIG's place.
 New: Leading zero in 12-hour time (07:05), with PM in place of CHG.
 New: a live preview at the top of the settings page shows the face with your changes before you Save.
-Changed: the top bar shows a battery icon (with a bolt while charging) and a walking figure instead of the words BATT and STEPS.
+Changed: the top bar shows a battery icon (with a bolt while charging) and footprints instead of the words BATT and STEPS.
 Changed: the bottom bezel always shows a heart and your heart rate; the WR badge is gone.
 Changed: digits are always upright, and dates always have leading zeros.
 Removed: the date (DD-MM / MM-DD), the seconds, the hourly chime and vibration, the indicator grid, and the Slanted digits and Show heart rate settings.
@@ -13,3 +13,4 @@ Note: this update resets your settings once; open the settings page and tap Save
 Changed: the top and bottom bezel text is in Chakra Petch, a little bigger (texts with emoji or accented letters keep the system font).
 Fixed: with corner brackets, the bottom row's boxes have their outer corners too.
 Changed: the bottom bezel is as short as the top one, so the LCD is 4 px taller.
+Changed: the top bar shows footprints for steps, counted in thousands from 1,000 (5.2K, 12K), and the battery level without the % sign, both a little smaller so they stay clear of the Center tab edge.

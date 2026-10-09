@@ -1355,47 +1355,54 @@ static void draw_battery_icon(GContext *ctx, int x, int y, GColor ink) {
   if (s_battery.is_charging) draw_icon(ctx, x + 7, y + 2, BOLT, 5, fill > 6 ? s_col[COL_CASE] : ink);
 }
 
-// Top bezel: a battery icon and the level, and a walking figure and the step
+// Top bezel: a battery icon and the level, and footprints and the step
 // count; or the custom texts when those are switched off. The right text takes the width it
 // needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
 static void draw_top_bezel(GContext *ctx) {
-  static const char *const WALKER[] = {
-    "...##.....", "...##.....", "..........", "..####....", ".#.###....", "#..##.##..",
-    "...##.....", "..#..#....", ".#...#....", "#.....#...", "......#...",
+  static const char *const FEET[] = {  // two footprints (sole and heel), the right one ahead
+    "........###.", ".......#####", ".......#####", ".......#####", ".###...#####", "#####...###.",
+    "#####.......", "#####...###.", "#####...###.", ".###........", "............", ".###........",
+    ".###........",
   };
-  enum { ICON_GAP = 4, BATTERY_W = 20, WALKER_W = 10 };
+  enum { ICON_GAP = 4, BATTERY_W = 20, FEET_W = 12 };
   char left[24], right[24];
   if (s_settings.show_battery) {
-    snprintf(left, sizeof(left), "%d%%", s_battery.charge_percent);
+    snprintf(left, sizeof(left), "%d", s_battery.charge_percent);  // (the icon says it's a percentage)
   } else {
     snprintf(left, sizeof(left), "%s", s_settings.top_left);
   }
   if (!s_settings.show_steps) {
     snprintf(right, sizeof(right), "%s", s_settings.top_right);
-  } else if (s_steps >= 1000) {
-    snprintf(right, sizeof(right), "%d,%03d", s_steps / 1000, s_steps % 1000);
+  } else if (s_steps >= 10000) {  // in thousands, rounded down: 12K
+    snprintf(right, sizeof(right), "%dK", s_steps / 1000);
+  } else if (s_steps >= 1000) {  // with one decimal: 5.2K
+    snprintf(right, sizeof(right), "%d.%dK", s_steps / 1000, s_steps % 1000 / 100);
   } else if (s_steps >= 0) {
     snprintf(right, sizeof(right), "%d", s_steps);
   } else {
     snprintf(right, sizeof(right), "--");
   }
-  // Both texts 13 px tall, or both 11 px when the left one doesn't fit beside the right one.
+  // The battery level and the step count are 11 px tall, short enough to stay clear of the
+  // Center tab window edge's raised middle. The custom texts are 13 px, or both 11 px when the
+  // left one doesn't fit beside the right one.
   const int left_x = 10 + (s_settings.show_battery ? BATTERY_W + ICON_GAP : 0);
-  BezelGroup g = BG_NORMAL;
+  BezelGroup g = BG_NORMAL, gl, gr;
   int right_w, right_start;
   for (;;) {
-    right_w = bezel_width(g, right, TOP_RIGHT_MAX - 4) + 4;
+    gl = s_settings.show_battery ? BG_SMALL : g;
+    gr = s_settings.show_steps ? BG_SMALL : g;
+    right_w = bezel_width(gr, right, TOP_RIGHT_MAX - 4) + 4;
     if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
-    right_start = 190 - right_w - (s_settings.show_steps ? WALKER_W + ICON_GAP : 0);
-    if (g == BG_SMALL || bezel_fits(g, left, right_start - left_x - 4)) break;
+    right_start = 190 - right_w - (s_settings.show_steps ? FEET_W + ICON_GAP : 0);
+    if (g == BG_SMALL || bezel_fits(gl, left, right_start - left_x - 4)) break;
     g = BG_SMALL;
   }
-  draw_bezel_text(ctx, BAR_TOP, g, right, 190 - right_w, right_w, GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
-  if (s_settings.show_steps) {  // the figure just left of the number
-    draw_icon(ctx, right_start + 4, TOP_CAP_Y + 1, WALKER, ARRAY_LENGTH(WALKER), s_col[COL_TOP_RIGHT]);
+  draw_bezel_text(ctx, BAR_TOP, gr, right, 190 - right_w, right_w, GTextAlignmentRight, s_col[COL_TOP_RIGHT]);
+  if (s_settings.show_steps) {  // the footprints just left of the number
+    draw_icon(ctx, right_start + 2, TOP_CAP_Y, FEET, ARRAY_LENGTH(FEET), s_col[COL_TOP_RIGHT]);
   }
   if (s_settings.show_battery) draw_battery_icon(ctx, 10, TOP_CAP_Y + 1, s_col[COL_TOP_LEFT]);
-  draw_bezel_text(ctx, BAR_TOP, g, left, left_x, right_start - left_x - 4, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  draw_bezel_text(ctx, BAR_TOP, gl, left, left_x, right_start - left_x - 4, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
 }
 
 // Bottom bezel: a heart and the latest heart rate, and the custom label.

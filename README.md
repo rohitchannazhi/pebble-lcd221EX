@@ -16,7 +16,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 
 | Area | Content |
 |---|---|
-| Top bezel | A battery icon (filled to the level, with a bolt while charging) and the level, and a walking figure and the step count; or your own text instead of either (settings) |
+| Top bezel | A battery icon (filled to the level, with a bolt while charging) and the level, and footprints and the step count (in thousands from 1,000: `5.2K`, `12K`), smaller than the custom texts; or your own text instead of either (settings) |
 | Weekday | Dot-matrix day name and the day of the month (`MON 05`) |
 | Indicators | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on; as pills, only the active ones, or icons (settings). Inactive ones use the same faint gray as the unlit segments |
 | Time | Large 7-segment digits. A **P** lights up for PM in 12-hour mode |
