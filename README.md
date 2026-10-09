@@ -173,8 +173,8 @@ vibrations, the backlight colours, live heart rate, and every control on the set
   never from a horizontal bar, so every bar keeps the same thickness).
 - The weekday is a 5x5 dot matrix, like the original.
 - The bezel text is Chakra Petch, pre-rendered like the digit fonts (`resources/fonts/bezel.bin`):
-  capitals 13 px tall in the top bezel and 16 px in the bottom one. When a bezel's texts don't fit
-  at that size, both of them drop to the next size (11 px on top, 13 px below), then are cut with
+  capitals 13 px tall in both bezels (22 px tall each). When a bezel's texts don't fit at that
+  size, both of them drop to 11 px, then are cut with
   "...". A text with a character the font lacks (an emoji, an accented letter) uses the system
   font (Gothic) instead.
 - Colours come from one place, `apply_theme()`, which fills `s_col[]` with one colour per component

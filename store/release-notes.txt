@@ -10,6 +10,6 @@ Changed: the bottom bezel always shows a heart and your heart rate; the WR badge
 Changed: digits are always upright, and dates always have leading zeros.
 Removed: the date (DD-MM / MM-DD), the seconds, the hourly chime and vibration, the indicator grid, and the Slanted digits and Show heart rate settings.
 Note: this update resets your settings once; open the settings page and tap Save to restore them.
-Changed: the top and bottom bezel text is bigger, in Chakra Petch (texts with emoji or accented letters keep the system font).
+Changed: the top and bottom bezel text is in Chakra Petch, a little bigger (texts with emoji or accented letters keep the system font).
 Fixed: with corner brackets, the bottom row's boxes have their outer corners too.
-Changed: the top bezel is as tall as the bottom one (the LCD starts 4 px lower).
+Changed: the bottom bezel is as short as the top one, so the LCD is 4 px taller.

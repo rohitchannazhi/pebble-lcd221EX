@@ -62,13 +62,13 @@ LABEL_FONT = {name: "oxanium" for name in OUTPUT}
 # Characters taken from another font: Iceberg's degree mark sits above its digits, where the
 # glyphs are cut off.
 CHAR_FONT = {"iceberg": {"\u00b0": "saira"}}
-# bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 and 16 px tall,
+# bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 (and 11) px tall,
 # with every character an upper-cased custom text may use (anything else falls back to the
 # system font). Its glyphs also reach below the baseline (commas, brackets).
 BEZEL_FONT = "chakrapetch"
 BEZEL_CHARS = "".join(chr(c) for c in range(0x20, 0x60))
-# (The third size is for texts too long for the top bezel's 13 px.)
-BEZEL_GROUPS = [("top", BEZEL_CHARS, "H", 13), ("bottom", BEZEL_CHARS, "H", 16), ("small", BEZEL_CHARS, "H", 11)]
+# (The second size is for texts too long for 13 px.)
+BEZEL_GROUPS = [("normal", BEZEL_CHARS, "H", 13), ("small", BEZEL_CHARS, "H", 11)]
 
 
 def load(path, size, axes):

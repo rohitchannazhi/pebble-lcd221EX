@@ -533,12 +533,11 @@ static void font_draw_centered(FontGroup g, char ch, int cx, int baseline, GColo
 }
 
 // The bezels' font (Chakra Petch, pre-rendered by tools/gen_fonts.py into bezel.bin): every
-// character an upper-cased custom text may use, with capitals 13 px tall in the top bezel and
-// 16 px in the bottom one, and 11 px for top-bezel texts too long for 13 (a bottom-bezel one
-// goes down to 13). A glyph's bitmap starts at the top of the capitals and reaches below the
+// character an upper-cased custom text may use, with capitals 13 px tall, and 11 px for texts
+// too long for 13. A glyph's bitmap starts at the top of the capitals and reaches below the
 // baseline. A text with any other character (an emoji, an accent) uses the system font.
-typedef enum { BG_TOP, BG_BOTTOM, BG_SMALL, BG_COUNT } BezelGroup;
-static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 16, 11 };
+typedef enum { BG_NORMAL, BG_SMALL, BG_COUNT } BezelGroup;
+static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 11 };
 static uint8_t *s_bezel_font;  // NULL if it couldn't be loaded: the system font is used instead
 
 static bool bezel_font_has(BezelGroup g, const char *text) {
@@ -651,20 +650,20 @@ static void apply_backlight(void) {
 // running edge to edge, between a top and a bottom bezel of the same height (BEZEL_H rows
 // each, outside the LCD window's 2 px edges).
 #define LCD_X 0
-#define LCD_Y 28
+#define LCD_Y 24
 #define LCD_W 200
-#define LCD_H 172
+#define LCD_H 180
 #define BEZEL_H (LCD_Y - 2)
 _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels are not the same height");
 
 // Row 1: weekday and day of the month (left) and the indicators (right), in the rows
 // BOX_TOP..BOX_BOTTOM.
 #define WEEKDAY_X 6
-#define WEEKDAY_Y 37
+#define WEEKDAY_Y 35
 #define BOX_RIGHT 191   // the indicators' right edge
 #define BOX_DIV 152     // the "active only" style's second column ends 2 px left of this
-#define BOX_TOP 37      // the indicators' row: top (= weekday top)
-#define BOX_BOTTOM 65   // and bottom (= weekday bottom)
+#define BOX_TOP 35      // the indicators' row: top (= weekday top)
+#define BOX_BOTTOM 63   // and bottom (= weekday bottom)
 #define LABEL_H 10      // indicator label height in rows
 
 // Row 2: the time.
@@ -680,7 +679,7 @@ _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels ar
 #define PM_DY -2  // and how many rows it sits above the top of the digits
 
 // Row 3: today's low and high (left) and the temperature (right), under a 2px rule.
-#define ROW3_LINE_Y 154
+#define ROW3_LINE_Y 156
 #define ROW3_DIV_X 126  // vertical divider between the low / high box and the right box
 #define ROW3_H 36       // height of the right box's digits
 // The right box's digits and the temperature's parts: the sign slot's
@@ -696,7 +695,7 @@ _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels ar
 // Bezels: the top of the bezel font's capitals at its full size in each bezel, where the icons
 // line up.
 #define TOP_CAP_Y ((BEZEL_H - 13) / 2)                                      // 13 px capitals
-#define BOTTOM_CAP_Y (PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - 16) / 2)  // 16 px capitals
+#define BOTTOM_CAP_Y (PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - 13) / 2)
 #define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
 
 static const char *const DAYS[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
@@ -709,13 +708,8 @@ static void draw_text(GContext *ctx, const char *text, GRect box, GTextAlignment
 
 // A bezel text is drawn in the bezel font when it has all the text's characters, at the size its
 // bezel chose (see draw_top_bezel and draw_bottom_bezel), cut with "..." if it still doesn't fit
-// its box. Otherwise it is drawn in the system font (Gothic 18 bold on top, 24 bold below, as
-// before the bezel font), which cuts it the same way.
+// its box. Otherwise it is drawn in the system font (Gothic 18 bold), which cuts it the same way.
 typedef enum { BAR_TOP, BAR_BOTTOM } Bezel;
-
-static GFont bezel_system_font(Bezel bar) {
-  return fonts_get_system_font(bar == BAR_TOP ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_24_BOLD);
-}
 
 // Whether a text fits `w` px at size `g` (a system-font text always counts: it is cut anyway).
 static bool bezel_fits(BezelGroup g, const char *text, int w) {
@@ -723,12 +717,12 @@ static bool bezel_fits(BezelGroup g, const char *text, int w) {
 }
 
 // The width a bezel text takes (at most `w`), in whichever font it is drawn in.
-static int bezel_width(Bezel bar, BezelGroup g, const char *text, int w) {
+static int bezel_width(BezelGroup g, const char *text, int w) {
   if (bezel_font_has(g, text)) {
     const int tw = bezel_text_width(g, text);
     return tw < w ? tw : w;
   }
-  return graphics_text_layout_get_content_size(text, bezel_system_font(bar), GRect(0, 0, w, 30),
+  return graphics_text_layout_get_content_size(text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD), GRect(0, 0, w, 30),
                                                GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w;
 }
 
@@ -761,12 +755,9 @@ static void draw_bezel_text(GContext *ctx, Bezel bar, BezelGroup g, const char *
     s_fb = NULL;
     return;
   }
-  // The system font's capitals (11 px, Gothic 18; 14 px, Gothic 24) start 7 or 10 px below the
-  // box top: centred in the bezel like the bezel font's.
-  const GRect box = bar == BAR_TOP ? GRect(x, (BEZEL_H - 11) / 2 - 7, w, 22)
-                                   : GRect(x, PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - 14) / 2 - 10, w, 30);
-  graphics_context_set_text_color(ctx, color);
-  graphics_draw_text(ctx, text, bezel_system_font(bar), box, GTextOverflowModeTrailingEllipsis, align, NULL);
+  // The system font's 11 px capitals start 7 px below the box top: centred in the bezel.
+  const int top = (bar == BAR_TOP ? 0 : PBL_DISPLAY_HEIGHT - BEZEL_H) + (BEZEL_H - 11) / 2 - 7;
+  draw_text(ctx, text, GRect(x, top, w, 22), align, color);
 }
 
 // Draws a label so it fits its indicator-box cell. The text is drawn in the
@@ -1243,8 +1234,8 @@ static void draw_rules(void) {
 // rows). Outward means into the case, inward into the LCD.
 static void draw_lcd_edge_style(GColor c, int top, int bottom) {
   switch (s_settings.edge_style) {
-    case EDGE_TAB: {  // a 2 px line that steps 4 px out into the case around a raised centre section
-      const int x0 = 66, x1 = LCD_W - 66, rise = 4;
+    case EDGE_TAB: {  // a 2 px line that steps 3 px out into the case around a raised centre section
+      const int x0 = 66, x1 = LCD_W - 66, rise = 3;
       for (int e = 0; e < 2; e++) {
         const int y = e ? bottom : top, out = e ? 1 : -1;  // out: away from the LCD
         fill(LCD_X, y, x0 - LCD_X, 2, c, false);
@@ -1390,10 +1381,10 @@ static void draw_top_bezel(GContext *ctx) {
   }
   // Both texts 13 px tall, or both 11 px when the left one doesn't fit beside the right one.
   const int left_x = 10 + (s_settings.show_battery ? BATTERY_W + ICON_GAP : 0);
-  BezelGroup g = BG_TOP;
+  BezelGroup g = BG_NORMAL;
   int right_w, right_start;
   for (;;) {
-    right_w = bezel_width(BAR_TOP, g, right, TOP_RIGHT_MAX - 4) + 4;
+    right_w = bezel_width(g, right, TOP_RIGHT_MAX - 4) + 4;
     if (right_w > TOP_RIGHT_MAX) right_w = TOP_RIGHT_MAX;
     right_start = 190 - right_w - (s_settings.show_steps ? WALKER_W + ICON_GAP : 0);
     if (g == BG_SMALL || bezel_fits(g, left, right_start - left_x - 4)) break;
@@ -1413,12 +1404,12 @@ static void draw_bottom_bezel(GContext *ctx) {
     "..###...###..", ".#####.#####.", "#############", "#############", "#############",
     ".###########.", "..#########..", "...#######...", "....#####....", ".....###.....", "......#......",
   };
-  draw_icon(ctx, 12, BOTTOM_CAP_Y + 2, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
+  draw_icon(ctx, 12, BOTTOM_CAP_Y + 1, HEART, ARRAY_LENGTH(HEART), s_col[COL_BADGE]);
   char hr_text[12];
   if (s_hr > 0) snprintf(hr_text, sizeof(hr_text), "%d", s_hr);
   else snprintf(hr_text, sizeof(hr_text), "--");
-  // Both texts 16 px tall, or both 13 px when the label doesn't fit at 16.
-  const BezelGroup g = bezel_fits(BG_BOTTOM, s_settings.bezel_label, 120) ? BG_BOTTOM : BG_TOP;
+  // Both texts 13 px tall, or both 11 px when the label doesn't fit at 13.
+  const BezelGroup g = bezel_fits(BG_NORMAL, s_settings.bezel_label, 120) ? BG_NORMAL : BG_SMALL;
   draw_bezel_text(ctx, BAR_BOTTOM, g, hr_text, 30, 40, GTextAlignmentLeft, s_col[COL_HEART]);
   draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
 }
