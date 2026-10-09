@@ -648,20 +648,23 @@ static void apply_backlight(void) {
 // Drawing
 
 // Screen layout (Pebble Time 2, 200x228): a black case with a white "LCD" panel
-// running edge to edge, a top bezel above it and a bottom bezel below.
+// running edge to edge, between a top and a bottom bezel of the same height (BEZEL_H rows
+// each, outside the LCD window's 2 px edges).
 #define LCD_X 0
-#define LCD_Y 24
+#define LCD_Y 28
 #define LCD_W 200
-#define LCD_H 176
+#define LCD_H 172
+#define BEZEL_H (LCD_Y - 2)
+_Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels are not the same height");
 
 // Row 1: weekday and day of the month (left) and the indicators (right), in the rows
 // BOX_TOP..BOX_BOTTOM.
 #define WEEKDAY_X 6
-#define WEEKDAY_Y 34
+#define WEEKDAY_Y 37
 #define BOX_RIGHT 191   // the indicators' right edge
 #define BOX_DIV 152     // the "active only" style's second column ends 2 px left of this
-#define BOX_TOP 34      // the indicators' row: top (= weekday top)
-#define BOX_BOTTOM 62   // and bottom (= weekday bottom)
+#define BOX_TOP 37      // the indicators' row: top (= weekday top)
+#define BOX_BOTTOM 65   // and bottom (= weekday bottom)
 #define LABEL_H 10      // indicator label height in rows
 
 // Row 2: the time.
@@ -670,7 +673,7 @@ static void apply_backlight(void) {
 // 4px from the edge, with the PM marker in the empty left part of that box. (The
 // original's marker starts level with the digits and 6px from the edge; here it is
 // nudged up and in a little.)
-#define TIME_Y 76
+#define TIME_Y 78
 #define TIME_W 35
 #define TIME_H 70
 #define PM_X 7    // the PM marker's distance from the LCD's left edge
@@ -692,8 +695,8 @@ static void apply_backlight(void) {
 
 // Bezels: the top of the bezel font's capitals at its full size in each bezel, where the icons
 // line up.
-#define TOP_CAP_Y 4        // 13 px capitals
-#define BOTTOM_CAP_Y 207   // 16 px capitals
+#define TOP_CAP_Y ((BEZEL_H - 13) / 2)                                      // 13 px capitals
+#define BOTTOM_CAP_Y (PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - 16) / 2)  // 16 px capitals
 #define TOP_RIGHT_MAX 104  // widest the top-right bezel text may be
 
 static const char *const DAYS[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
@@ -751,16 +754,17 @@ static void draw_bezel_text(GContext *ctx, Bezel bar, BezelGroup g, const char *
     }
     const int tw = bezel_text_width(g, text);
     x += align == GTextAlignmentRight ? w - tw : align == GTextAlignmentCenter ? (w - tw) / 2 : 0;
-    // Rows 0-21 above the LCD, 202-227 below it.
-    const int cap_y = bar == BAR_TOP ? (22 - BEZEL_CAP[g]) / 2 : 202 + (26 - BEZEL_CAP[g]) / 2;
+    const int cap_y = (bar == BAR_TOP ? 0 : PBL_DISPLAY_HEIGHT - BEZEL_H) + (BEZEL_H - BEZEL_CAP[g]) / 2;
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     bezel_draw_text(g, text, x, cap_y, color);
     graphics_release_frame_buffer(ctx, s_fb);
     s_fb = NULL;
     return;
   }
-  // The system font's capitals start 7 (Gothic 18) or 10 (Gothic 24) px below the box top.
-  const GRect box = bar == BAR_TOP ? GRect(x, -2, w, 22) : GRect(x, 198, w, 30);
+  // The system font's capitals (11 px, Gothic 18; 14 px, Gothic 24) start 7 or 10 px below the
+  // box top: centred in the bezel like the bezel font's.
+  const GRect box = bar == BAR_TOP ? GRect(x, (BEZEL_H - 11) / 2 - 7, w, 22)
+                                   : GRect(x, PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - 14) / 2 - 10, w, 30);
   graphics_context_set_text_color(ctx, color);
   graphics_draw_text(ctx, text, bezel_system_font(bar), box, GTextOverflowModeTrailingEllipsis, align, NULL);
 }
@@ -1428,7 +1432,7 @@ typedef struct {
 
 // The top-left corner of the area the indicator styles share.
 #define IND_X0 107
-#define IND_Y0 34
+#define IND_Y0 BOX_TOP
 
 // An indicator's label in `cell`: lit, or faint dots when off. The system font fitted to the
 // cell, or the digit style's font.

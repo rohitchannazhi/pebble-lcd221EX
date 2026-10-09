@@ -131,7 +131,8 @@ module.exports = function () {
           pen.fillText(text, 0, top + cap);
           pen.setTransform(1, 0, 0, 1, 0, 0);
           var px = pen.getImageData(0, 0, Math.min(w, W), Math.min(h, 40)).data, fb = heap(), base = api.preview_fb();
-          for (var j = 0; j < Math.min(h, 40); j++) {
+          // (Gothic draws nothing above its capitals; the phone font's anti-aliasing may.)
+          for (var j = top; j < Math.min(h, 40); j++) {
             for (var i = 0; i < Math.min(w, W); i++) {
               var fx = x + i, fy = y + j;
               if (fx < 0 || fx >= W || fy < 0 || fy >= H) continue;

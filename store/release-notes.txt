@@ -12,3 +12,4 @@ Removed: the date (DD-MM / MM-DD), the seconds, the hourly chime and vibration, 
 Note: this update resets your settings once; open the settings page and tap Save to restore them.
 Changed: the top and bottom bezel text is bigger, in Chakra Petch (texts with emoji or accented letters keep the system font).
 Fixed: with corner brackets, the bottom row's boxes have their outer corners too.
+Changed: the top bezel is as tall as the bottom one (the LCD starts 4 px lower).
