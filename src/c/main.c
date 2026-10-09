@@ -22,6 +22,7 @@
 
 #include <pebble.h>
 #include "segments.h"
+#include "segments_dseg.h"
 
 // Persistent storage keys. Each must differ from the others (and from any older value of another).
 #define SETTINGS_KEY 19  // bumped whenever Settings changes layout (older saves are then ignored)
@@ -46,9 +47,12 @@ enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
-// (DIGITS_MATRIX: dot-matrix digits like the weekday's letters, drawn like the 7-segment ones.)
-enum { DIGITS_SEGMENT = 0, DIGITS_SAIRA = 1, DIGITS_HANDJET = 2, DIGITS_ICEBERG = 3, DIGITS_STENCIL = 4,
-       DIGITS_MATRIX = 5, DIGITS_COUNT };
+// Digit styles (the values are saved). All but DIGITS_ICEBERG (a pre-rendered font) are drawn by
+// the code: 7-segment digits whose segments are solid, dotted or hollow, in the 7-Segment font's
+// shapes or the Modern ones (segments_dseg.h); or dot-matrix digits like the weekday's letters
+// (DIGITS_MATRIX_DOTTED: with the time in dotted segments). See use_digits().
+enum { DIGITS_SEGMENT = 0, DIGITS_DOTTED = 1, DIGITS_HOLLOW = 2, DIGITS_ICEBERG = 3, DIGITS_MODERN_LIGHT = 4,
+       DIGITS_MATRIX = 5, DIGITS_MATRIX_DOTTED = 6, DIGITS_MODERN_BOLD = 7, DIGITS_COUNT };
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
@@ -269,14 +273,42 @@ static void poly_rows(const int16_t *pts, int n, int h, int *first, int *last) {
   if (*last > h - 1) *last = h - 1;
 }
 
-// Fills a polygon given in 0..1000 coordinates (up to 8 points), scaled into the box (x, y, w, h)
-// with its bars snapped to whole pixels. A pixel is filled when its centre is inside (even-odd rule).
+// The segments' shapes: the 7-Segment font's (segments.h, with their bars snapped to whole
+// pixels: snap_poly), or the Modern styles' (segments_dseg.h, drawn as they are).
+typedef struct {
+  const int16_t *const *polys;
+  const uint8_t *lens;
+  bool snap;
+} SegShapes;
+static const SegShapes SHAPES_CLASSIC = { SEG_POLYS, SEG_POLY_LEN, true };
+static const SegShapes SHAPES_LIGHT = { SEG7_MODERN_LIGHT, SEG7_MODERN_LIGHT_LEN, false };
+static const SegShapes SHAPES_BOLD = { SEG7_MODERN_BOLD, SEG7_MODERN_BOLD_LEN, false };
+
+// How a segment is filled: solid, as a grid of 2x2 px dots 3 px apart, or as a 2 px outline.
+enum { FILL_SOLID, FILL_DOTS, FILL_HOLLOW };
+
+// What draw_digit draws, set for each area of the LCD by use_digits().
+static const SegShapes *s_shapes = &SHAPES_CLASSIC;
+static int s_fill = FILL_SOLID;
+static bool s_matrix;  // dot-matrix digits instead of segments
+
+// A dotted or hollow shape is first drawn into this mask (the biggest is a time digit's segment).
+#define MASK_W 48
+#define MASK_H 72
+static uint8_t s_mask[MASK_H][MASK_W];
+
+// Fills a polygon given in 0..1000 coordinates (snapped: up to 8 points), scaled into the box
+// (x, y, w, h), in the current fill (s_fill). A pixel is inside when its centre is (even-odd rule).
 static void fill_poly(int x, int y, int w, int h, const int16_t *pts, int n, GColor c, bool dither) {
   int16_t snapped[16];
-  snap_poly(w, h, pts, n, snapped);
-  pts = snapped;
+  if (s_shapes->snap && n <= 8) {
+    snap_poly(w, h, pts, n, snapped);
+    pts = snapped;
+  }
   int first, last;
   poly_rows(pts, n, h, &first, &last);
+  const bool masked = s_fill != FILL_SOLID && h <= MASK_H;
+  if (masked) memset(s_mask, 0, sizeof(s_mask));
   for (int r = first; r <= last; r++) {
     int32_t yn = (int32_t)(2 * r + 1) * 1000 / (2 * h);
     int32_t xs[8];
@@ -294,9 +326,31 @@ static void fill_poly(int x, int y, int w, int h, const int16_t *pts, int n, GCo
     for (int i = 0; i + 1 < count; i += 2) {
       int c0 = -floor_div(1000 - 2 * xs[i] * w, 2000);   // ceil(px - 0.5)
       int c1 = floor_div(2 * xs[i + 1] * w - 1000, 2000);
-      if (c0 <= c1) span(y + r, x + c0, x + c1, c, dither);
+      if (c0 > c1) continue;
+      if (!masked) {
+        span(y + r, x + c0, x + c1, c, dither);
+        continue;
+      }
+      for (int k = c0 < 0 ? 0 : c0; k <= c1 && k < MASK_W; k++) s_mask[r][k] = 1;
     }
   }
+  if (!masked) return;
+  // Dotted: the pixels on a 3 px grid's 2x2 dots. Hollow: the pixels within 2 px of the edge.
+  // Ghosts (dither) are thinned out as usual; dotted ones more, or they look as dense as lit dots.
+#define IN(rr, kk) ((rr) >= 0 && (rr) < MASK_H && (kk) >= 0 && (kk) < MASK_W && s_mask[rr][kk])
+  for (int r = first; r <= last; r++) {
+    for (int k = 0; k < MASK_W; k++) {
+      if (!s_mask[r][k]) continue;
+      const int px = x + k, py = y + r;
+      bool keep = s_fill == FILL_DOTS ? (px % 3 < 2 && py % 3 < 2)
+                                      : !(IN(r - 2, k) && IN(r + 2, k) && IN(r, k - 2) && IN(r, k + 2));
+      if (keep && dither) {
+        keep = BAYER4[py & 3][px & 3] < (s_fill == FILL_DOTS ? s_ghost_density / 3 + 1 : s_ghost_density);
+      }
+      if (keep) span(py, px, px, c, false);
+    }
+  }
+#undef IN
 }
 
 // `wa` thirds of colour a mixed with the rest of colour b (the display has 4 levels per
@@ -318,16 +372,16 @@ static void draw_segments(int x, int y, int w, int h, uint8_t on, uint8_t presen
     uint8_t mask = present & (pass ? on : (uint8_t)~on);
     for (int i = 0; i < 7; i++) {
       if (!(mask & (1 << i))) continue;
-      fill_poly(x, y, w, h, SEG_POLYS[i], SEG_POLY_LEN[i], pass ? ink : s_ghost, !pass);
+      fill_poly(x, y, w, h, s_shapes->polys[i], s_shapes->lens[i], pass ? ink : s_ghost, !pass);
     }
   }
 }
 
 static void draw_matrix_digit(int x, int y, int w, int h, int value, GColor ink, bool ghosts);
 
-// A digit (or DIGIT_MINUS, or DIGIT_BLANK) in the box, in the 7-segment or dot-matrix style.
+// A digit (or DIGIT_MINUS, or DIGIT_BLANK) in the box, in segments or dot matrix (use_digits).
 static void draw_digit(int x, int y, int w, int h, int value, GColor ink) {
-  if (s_settings.digit_style == DIGITS_MATRIX) {
+  if (s_matrix) {
     draw_matrix_digit(x, y, w, h, value, ink, true);
     return;
   }
@@ -443,6 +497,45 @@ static void draw_matrix_digit(int x, int y, int w, int h, int value, GColor ink,
   }
 }
 
+// The LCD's areas, which may use different digits.
+typedef enum { AREA_TIME, AREA_DAY, AREA_OTHER } DigitArea;
+
+// The "Modern row": the weekday in 14-segment letters and the day of the month in Modern digits
+// (Hollow segments uses Modern Bold's).
+static bool modern_row(void) {
+  const int st = s_settings.digit_style;
+  return st == DIGITS_MODERN_LIGHT || st == DIGITS_MODERN_BOLD || st == DIGITS_HOLLOW;
+}
+// Dot-matrix weekday letters and day of the month (5x5).
+static bool matrix_row(void) {
+  const int st = s_settings.digit_style;
+  return st == DIGITS_MATRIX || st == DIGITS_MATRIX_DOTTED || st == DIGITS_DOTTED;
+}
+
+// Sets what draw_digit draws in an area, by digit style.
+static void use_digits(DigitArea area) {
+  const int st = s_settings.digit_style;
+  s_matrix = st == DIGITS_MATRIX || (st == DIGITS_MATRIX_DOTTED && area != AREA_TIME);
+  s_shapes = st == DIGITS_MODERN_LIGHT ? &SHAPES_LIGHT
+      : (st == DIGITS_MODERN_BOLD || (st == DIGITS_HOLLOW && area == AREA_DAY)) ? &SHAPES_BOLD : &SHAPES_CLASSIC;
+  s_fill = (st == DIGITS_DOTTED || (st == DIGITS_MATRIX_DOTTED && area == AREA_TIME)) ? FILL_DOTS
+      : (st == DIGITS_HOLLOW && area != AREA_DAY) ? FILL_HOLLOW : FILL_SOLID;
+}
+
+// 14-segment capitals (the Modern row's weekday), each `w` x `h`, `pitch` px apart; no ghosts.
+static void draw_seg14_text(int x, int y, int w, int h, int pitch, const char *text, GColor ink) {
+  const bool light = s_settings.digit_style == DIGITS_MODERN_LIGHT;
+  const int16_t *const *polys = light ? SEG14_MODERN_LIGHT : SEG14_MODERN_BOLD;
+  const uint8_t *lens = light ? SEG14_MODERN_LIGHT_LEN : SEG14_MODERN_BOLD_LEN;
+  const uint16_t *letters = light ? SEG14_MODERN_LIGHT_LETTERS : SEG14_MODERN_BOLD_LETTERS;
+  for (; *text; text++, x += pitch) {
+    if (*text < 'A' || *text > 'Z') continue;
+    for (int k = 0; k < 14; k++) {
+      if (letters[*text - 'A'] & (1 << k)) fill_poly(x, y, w, h, polys[k], lens[k], ink, false);
+    }
+  }
+}
+
 // A narrow "1" (3x7) or minus (3 dots) in a sign slot, level with draw_matrix_digit's dots for a
 // box `h` tall, `px` px apart.
 static void draw_matrix_sign(int x, int y, int h, bool one, int px, GColor ink) {
@@ -520,10 +613,7 @@ static void load_digit_font(void) {
   }
   uint32_t id;
   switch (s_settings.digit_style) {
-    case DIGITS_SAIRA:   id = RESOURCE_ID_FONT_SAIRA; break;
-    case DIGITS_HANDJET: id = RESOURCE_ID_FONT_HANDJET; break;
     case DIGITS_ICEBERG: id = RESOURCE_ID_FONT_ICEBERG; break;
-    case DIGITS_STENCIL: id = RESOURCE_ID_FONT_STENCIL; break;
     default: return;
   }
   s_font = load_font(id, FG_COUNT);
@@ -1009,7 +1099,7 @@ static void draw_time(void) {
   }
   if (is24 || zero12) {
     draw_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS]);
-  } else if (s_settings.digit_style == DIGITS_MATRIX) {  // just the 1, clear of the PM marker
+  } else if (s_matrix) {  // just the 1, clear of the PM marker
     draw_matrix_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS], false);
   } else {
     // In 12-hour mode the first digit can only be a 1 (or blank), so it only has
@@ -1019,9 +1109,17 @@ static void draw_time(void) {
   }
   draw_digit(X[1], ty, tw, th, hour % 10, s_col[COL_HOURS]);
   // As on the original, the colon's dots are centred 36% and 70% of the way down the digits.
+  // Dotted digits have a colon of 2x2 dots, hollow ones of hollow squares.
   const int dot = 7, dot1 = th * 36 / 100, dot2 = th * 70 / 100;  // dot size; centres below the top
-  fill(colon_x, ty + dot1 - dot / 2, dot, dot, s_col[COL_COLON], false);
-  fill(colon_x, ty + dot2 - dot / 2, dot, dot, s_col[COL_COLON], false);
+  for (int k = 0; k < 2; k++) {
+    const int cy = ty + (k ? dot2 : dot1) - dot / 2;
+    if (s_fill == FILL_DOTS) {
+      for (int i = 0; i < 9; i++) fill(colon_x + i % 3 * 3 - 1, cy + i / 3 * 3 - 1, 2, 2, s_col[COL_COLON], false);
+    } else {
+      fill(colon_x, cy, dot, dot, s_col[COL_COLON], false);
+      if (s_fill == FILL_HOLLOW) fill(colon_x + 2, cy + 2, dot - 4, dot - 4, s_lcd, false);
+    }
+  }
   draw_digit(X[2], ty, tw, th, s_now.tm_min / 10, s_col[COL_MINUTES]);
   draw_digit(X[3], ty, tw, th, s_now.tm_min % 10, s_col[COL_MINUTES]);
 }
@@ -1048,7 +1146,12 @@ static void draw_month_day(void) {
                    0, font_weekday_base(), ALIGN_LEFT, s_col[COL_WEEKDAY], DENSITY_FULL);
     return;
   }
-  if (s_settings.digit_style == DIGITS_MATRIX) {  // the weekday letters' 5x5 dots, a little narrower
+  if (modern_row()) {  // after the 14-segment weekday, in the same size
+    draw_digit(66, WEEKDAY_Y, 17, h, d / 10, s_col[COL_WEEKDAY]);
+    draw_digit(85, WEEKDAY_Y, 17, h, d % 10, s_col[COL_WEEKDAY]);
+    return;
+  }
+  if (matrix_row()) {  // the weekday letters' 5x5 dots, a little narrower
     draw_matrix(74, WEEKDAY_Y, MATRIX_DIGITS_5X5[d / 10], 5, 5, 3, 6, 2, 5, s_col[COL_WEEKDAY]);
     draw_matrix(91, WEEKDAY_Y, MATRIX_DIGITS_5X5[d % 10], 5, 5, 3, 6, 2, 5, s_col[COL_WEEKDAY]);
     return;
@@ -1081,7 +1184,7 @@ static void draw_temperature(void) {
   // verticals of a full-width digit placed so they land in the sign slot.
   // Unlit parts go first so the lit one is never covered by a ghost.
   const int w = RIGHT_DIGIT_W;
-  if (s_settings.digit_style == DIGITS_MATRIX) {  // the minus or the 1, without ghosts
+  if (s_matrix) {  // the minus or the 1, without ghosts
     if (neg) draw_matrix_sign(TEMP_MINUS_X + 2, dy, dh, false, 3, ink);
     if (hundred) draw_matrix_sign(TEMP_MINUS_X + 3, dy, dh, true, 3, ink);
   } else {
@@ -1192,7 +1295,7 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
   }
   // The "1" of 100+: the right verticals of a digit placed so they land between the mark and
   // the first digit. No unlit ghost at this size: it would crowd the digits.
-  if (hundred && s_settings.digit_style == DIGITS_MATRIX) draw_matrix_sign(x + 13, y, h, true, 2, ink);
+  if (hundred && s_matrix) draw_matrix_sign(x + 13, y, h, true, 2, ink);
   else if (hundred) draw_segments(x + 3, y, w, h, SEG_B | SEG_C, SEG_B | SEG_C, ink);
   if (!valid) {
     draw_digit(d1, y, w, h, DIGIT_MINUS, ink);
@@ -1389,14 +1492,19 @@ static void draw_lcd_edges(void) {
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
   draw_lcd_edges();
+  use_digits(AREA_DAY);
   if (font_active()) {  // centred on the indicators' row (2 px left: the letters have side bearings)
     font_draw_text(FG_WEEKDAY, DAYS[s_now.tm_wday], WEEKDAY_X - 2, 0, font_weekday_base(), ALIGN_LEFT,
                    s_col[COL_WEEKDAY], DENSITY_FULL);
+  } else if (modern_row()) {
+    draw_seg14_text(WEEKDAY_X, WEEKDAY_Y, 17, BOX_BOTTOM - BOX_TOP, 19, DAYS[s_now.tm_wday], s_col[COL_WEEKDAY]);
   } else {
     draw_day(WEEKDAY_X, WEEKDAY_Y, DAYS[s_now.tm_wday], s_col[COL_WEEKDAY]);
   }
   draw_month_day();
+  use_digits(AREA_TIME);
   draw_time();
+  use_digits(AREA_OTHER);
   draw_rules();
   draw_temperature_range();
   draw_temperature();
@@ -1543,7 +1651,7 @@ static void draw_tiny_label(const char *text, GRect cell, bool right, GColor col
 static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, bool right) {
   const GColor color = ind->on ? ind->ink : s_ghost;
   const int density = ind->on ? DENSITY_FULL : s_label_off_density;
-  if (s_settings.digit_style == DIGITS_MATRIX) {
+  if (s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED) {
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     draw_tiny_label(ind->label, cell, right, color, density);
     graphics_release_frame_buffer(ctx, s_fb);
@@ -1922,9 +2030,15 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
   bool font_changed = false;
   if ((t = dict_find(iter, MESSAGE_KEY_DigitStyle))) {
     const char *d = t->value->cstring;
-    const uint8_t style = strcmp(d, "saira") == 0 ? DIGITS_SAIRA : strcmp(d, "handjet") == 0 ? DIGITS_HANDJET
-        : strcmp(d, "iceberg") == 0 ? DIGITS_ICEBERG : strcmp(d, "stencil") == 0 ? DIGITS_STENCIL
-        : strcmp(d, "matrix") == 0 ? DIGITS_MATRIX : DIGITS_SEGMENT;
+    static const struct { const char *name; uint8_t style; } STYLES[] = {
+      { "dotted", DIGITS_DOTTED }, { "hollow", DIGITS_HOLLOW }, { "iceberg", DIGITS_ICEBERG },
+      { "light", DIGITS_MODERN_LIGHT }, { "bold", DIGITS_MODERN_BOLD }, { "matrix", DIGITS_MATRIX },
+      { "matrixdot", DIGITS_MATRIX_DOTTED },
+    };
+    uint8_t style = DIGITS_SEGMENT;
+    for (unsigned i = 0; i < ARRAY_LENGTH(STYLES); i++) {
+      if (strcmp(d, STYLES[i].name) == 0) style = STYLES[i].style;
+    }
     font_changed = style != s_settings.digit_style;
     s_settings.digit_style = style;
     settings_changed = true;

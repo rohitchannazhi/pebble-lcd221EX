@@ -131,14 +131,16 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "DigitStyle", "label": "Digit style", "defaultValue": "segment",
-        "description": "7-segment and Dot matrix are the LCD looks, with faint unlit segments or dots. The fonts are used for every text and number on the LCD (not the top and bottom bars).",
+        "description": "Every number on the LCD (not the top and bottom bars), with faint unlit segments or dots. Hollow segments and the Modern styles show the weekday in 14-segment letters; the Dot matrix styles and Dotted segments in dots.",
         "options": [
           { "label": "7-segment", "value": "segment" },
+          { "label": "Dotted segments", "value": "dotted" },
+          { "label": "Hollow segments", "value": "hollow" },
+          { "label": "Modern Light", "value": "light" },
+          { "label": "Modern Bold", "value": "bold" },
           { "label": "Dot matrix", "value": "matrix" },
-          { "label": "Condensed (based on Saira)", "value": "saira" },
-          { "label": "Handjet", "value": "handjet" },
-          { "label": "Angular (based on Iceberg)", "value": "iceberg" },
-          { "label": "Big Shoulders Stencil", "value": "stencil" }
+          { "label": "Dot matrix, dotted clock", "value": "matrixdot" },
+          { "label": "Angular (based on Iceberg)", "value": "iceberg" }
         ]
       },
       {

@@ -13,26 +13,35 @@ font by **Jan Bobrowski** ("~jb"), <https://torinak.com/font/7-segment>, version
   font, it stays under the same licence. The outlines are not sold on their own.
 - The font file carries no copyright line or Reserved Font Name.
 
-## Saira, Handjet, Iceberg, Big Shoulders Stencil, Chakra Petch and Oxanium (pre-rendered fonts)
+## DSEG (the Modern segment outlines)
 
-The "Digit style" fonts are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
+The "Modern Light" and "Modern Bold" digit styles (and Hollow segments' weekday row) use the
+segment outlines of **DSEG7 Modern** and **DSEG14 Modern** (Light and Bold) by **keshikan**,
+<https://github.com/keshikan/DSEG>, version 0.46: Copyright (c) 2017, keshikan
+(http://www.keshikan.net), with Reserved Font Name "DSEG".
+
+- Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt)).
+- How it is used: `tools/gen_dseg.py` reads the fonts and writes the segments of the "8" (DSEG7)
+  and of the all-segments glyph, with each letter's segments (DSEG14), as polygons into
+  `src/c/segments_dseg.h`. The font files are not included. The outlines are a Modified Version,
+  so they are offered as "Modern" and not under the reserved name; they stay under the same
+  licence and are not sold on their own.
+
+## Iceberg, Saira, Chakra Petch and Oxanium (pre-rendered fonts)
+
+The "Digit style" font and the bezels' font are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
 `resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
 The font files themselves are not included.
 
-- **Saira** (Saira Extra Condensed Bold): Copyright 2016 The Saira Project Authors
-  (omnibus.type@gmail.com), with Reserved Font Name "Saira". The rendered version is a Modified
-  Version, so it is offered as "Condensed (based on Saira)" and not under the reserved name.
-- **Handjet**: Copyright 2018 The Handjet Project Authors (https://github.com/rosettatype/Handjet/).
 - **Iceberg**: Copyright (c) 2011, Cyreal (www.cyreal.org), with Reserved Font Name "Iceberg". The
   rendered version is a Modified Version, so it is offered as "Angular (based on Iceberg)" and not
   under the reserved name. Its degree mark is Saira's.
-- **Big Shoulders Stencil**: Copyright 2019 The Big Shoulders Project Authors
-  (https://github.com/xotypeco/big_shoulders).
+- **Saira** (Saira Extra Condensed Bold): Copyright 2016 The Saira Project Authors
+  (omnibus.type@gmail.com), with Reserved Font Name "Saira". Only Angular's degree mark.
 - **Chakra Petch** (SemiBold): Copyright 2018 The Chakra Petch Project Authors
   (https://github.com/m4rc1e/Chakra-Petch.git). The top and bottom bezels' text (`bezel.bin`).
 - **Oxanium**: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium).
-  Not a digit style of its own: every style's small indicator labels use its letters, which read
-  better at that size than the condensed fonts'.
+  Only Angular's small indicator labels, which read better in its letters at that size.
 - Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt));
   the rendered files stay under the same licence.
 

@@ -8,7 +8,7 @@ WHAT IT SHOWS
 - Indicators for phone connection, charging, daylight saving time and Quiet Time
 
 SETTINGS
-Live preview. Black or silver case, inverted colors, 7-segment digits or four condensed fonts, divider, window edge and indicator styles, a color for every part of the face, backlight color, and vibration on phone disconnect or reconnect.
+Live preview. Black or silver case, inverted colors, eight digit styles (segments, dots, a font), divider, window edge and indicator styles, a color for every part of the face, backlight color, and vibration on phone disconnect or reconnect.
 
 PERMISSIONS
 Location (through your phone) for the weather, and health data for steps and heart rate. The only thing that leaves your phone is a weather request to Open-Meteo containing your location rounded to about 100 meters.

@@ -8,13 +8,12 @@ of the reference glyph ("8" for digits, "M" for letters) down to the baseline. A
 size is fixed by its widest possible text, so it never changes with the value shown.
 
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
-    sairaextracondensed/SairaExtraCondensed-Bold.ttf, handjet/Handjet[ELGR,ELSH,wght].ttf,
-    iceberg/Iceberg-Regular.ttf, bigshouldersstencil/BigShouldersStencil[opsz,wght].ttf,
-    and oxanium/Oxanium[wght].ttf, which only lends its letters (see LABEL_FONT);
+    iceberg/Iceberg-Regular.ttf; sairaextracondensed/SairaExtraCondensed-Bold.ttf, which only lends
+    its degree mark (CHAR_FONT), and oxanium/Oxanium[wght].ttf, its letters (LABEL_FONT);
     chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text (bezel.bin, see BEZEL_GROUPS).
-Usage (needs Pillow; give all six, as they borrow from each other):
-    python3 tools/gen_fonts.py SairaExtraCondensed-Bold.ttf Handjet*.ttf Iceberg-Regular.ttf \
-        BigShouldersStencil*.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf
+Usage (needs Pillow; give all four, as they borrow from each other):
+    python3 tools/gen_fonts.py Iceberg-Regular.ttf SairaExtraCondensed-Bold.ttf Oxanium*.ttf \
+        ChakraPetch-SemiBold.ttf
 
 File format (all offsets absolute, little-endian):
     "LF" 1 <groups>, then per group: H, count, table offset (2 bytes);
@@ -45,17 +44,15 @@ GROUPS = [
     ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 # Output name -> (the start of its file's name, its variable-font axis settings, or None).
-# The four digit styles are condensed: their digits fill the 7-segment digits' cells without
-# being squeezed or made smaller.
+# The digit style font (Angular) is condensed: its digits fill the 7-segment digits' cells
+# without being squeezed or made smaller.
 FONTS = {
-    "saira": ("sairaextracondensed", None),
-    "handjet": ("handjet", {"Weight": 600}),
+    "saira": ("sairaextracondensed", None),    # only lends its degree mark, below
     "iceberg": ("iceberg", None),
-    "stencil": ("bigshouldersstencil", {"Weight": 800}),
     "oxanium": ("oxanium", {"Weight": 700}),  # only lends its letters, below
     "chakrapetch": ("chakrapetch", None),      # the bezels' font
 }
-OUTPUT = ["saira", "handjet", "iceberg", "stencil"]  # in RESOURCE_ID order (package.json)
+OUTPUT = ["iceberg"]  # the digit style fonts, in RESOURCE_ID order (package.json)
 # The small indicator labels: condensed letters are hard to read at 10 px, so they all come
 # from Oxanium.
 LABEL_FONT = {name: "oxanium" for name in OUTPUT}

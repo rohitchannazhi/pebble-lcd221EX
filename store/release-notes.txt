@@ -1,5 +1,5 @@
 New: today's low and high temperature in the bottom row, from the same Open-Meteo weather as the current temperature, with the day of the month next to the weekday (MON 05). Min / max marks: tall arrows, triangles or LO / HI.
-New: Digit style: the 7-segment digits, dot-matrix digits like the weekday's, or one of four condensed fonts (Condensed, Handjet, Angular, Big Shoulders Stencil) for all the text and numbers on the LCD.
+New: Digit style: 7-segment, dotted or hollow segments, Modern Light or Bold (with the weekday in 14-segment letters), dot matrix (with dot-matrix or dotted-segment time), or the Angular font, for all the numbers on the LCD.
 New: Divider lines: solid, segmented, ruler ticks, corner brackets or HUD chamfer.
 New: Window edge: match the dividers, center tab or notched, in the custom window edge colour.
 New: Indicators: pills, active only or icons. DST takes SIG's place.
