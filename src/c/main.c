@@ -47,12 +47,14 @@ enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
-// Digit styles (the values are saved). All but DIGITS_ICEBERG (a pre-rendered font) are drawn by
-// the code: 7-segment digits whose segments are solid, dotted or hollow, in the 7-Segment font's
-// shapes or the Modern ones (segments_dseg.h); or dot-matrix digits like the weekday's letters
-// (DIGITS_MATRIX_DOTTED: with the time in dotted segments). See use_digits().
+// Digit styles (the values are saved). All but DIGITS_ICEBERG and DIGITS_BEBAS (pre-rendered fonts)
+// are drawn by the code: 7-segment digits whose segments are solid, dotted or hollow, in the
+// 7-Segment font's shapes or the Modern and Classic Bold ones (segments_dseg.h); or dot-matrix
+// digits like the weekday's letters (DIGITS_MATRIX_DOTTED: with the time in dotted segments).
+// See use_digits().
 enum { DIGITS_SEGMENT = 0, DIGITS_DOTTED = 1, DIGITS_HOLLOW = 2, DIGITS_ICEBERG = 3, DIGITS_MODERN_LIGHT = 4,
-       DIGITS_MATRIX = 5, DIGITS_MATRIX_DOTTED = 6, DIGITS_MODERN_BOLD = 7, DIGITS_COUNT };
+       DIGITS_MATRIX = 5, DIGITS_MATRIX_DOTTED = 6, DIGITS_MODERN_BOLD = 7, DIGITS_CLASSIC_BOLD = 8,
+       DIGITS_BEBAS = 9, DIGITS_COUNT };
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
@@ -82,7 +84,7 @@ typedef struct {
   // Bottom bezel
   char bezel_label[16];        // printed on the bottom bezel, upper-cased
   // Appearance
-  bool silver;                 // silver case instead of black
+  bool silver;                 // silver case instead of black (unless case_custom)
   bool inverted;               // light digits on a dark LCD
   uint8_t digit_style;         // DIGITS_SEGMENT, or one of the pre-rendered fonts
   uint8_t line_style;          // LINES_SOLID, ... (the dividers in the bottom part of the LCD)
@@ -94,6 +96,9 @@ typedef struct {
   // Alerts
   uint8_t vibe_disconnect;     // VibeChoice played when the phone disconnects
   uint8_t vibe_connect;        // VibeChoice played when it reconnects
+  // Appearance, added later in what was the struct's padding (older saves: see init())
+  uint8_t case_custom;         // 1: the case in case_argb instead of black or silver
+  uint8_t case_argb;           // GColor8 of the custom case colour
 } Settings;
 
 typedef struct {
@@ -283,6 +288,7 @@ typedef struct {
 static const SegShapes SHAPES_CLASSIC = { SEG_POLYS, SEG_POLY_LEN, true };
 static const SegShapes SHAPES_LIGHT = { SEG7_MODERN_LIGHT, SEG7_MODERN_LIGHT_LEN, false };
 static const SegShapes SHAPES_BOLD = { SEG7_MODERN_BOLD, SEG7_MODERN_BOLD_LEN, false };
+static const SegShapes SHAPES_CLASSIC_BOLD = { SEG7_CLASSIC_BOLD, SEG7_CLASSIC_BOLD_LEN, false };
 
 // How a segment is filled: solid, as a grid of 2x2 px dots 3 px apart, or as a 2 px outline.
 enum { FILL_SOLID, FILL_DOTS, FILL_HOLLOW };
@@ -520,6 +526,8 @@ static void use_digits(DigitArea area) {
       : (st == DIGITS_MODERN_BOLD || (st == DIGITS_HOLLOW && area == AREA_DAY)) ? &SHAPES_BOLD : &SHAPES_CLASSIC;
   s_fill = (st == DIGITS_DOTTED || (st == DIGITS_MATRIX_DOTTED && area == AREA_TIME)) ? FILL_DOTS
       : (st == DIGITS_HOLLOW && area != AREA_DAY) ? FILL_HOLLOW : FILL_SOLID;
+  // Classic Bold: the day of the month beside the weekday is too small for its wide bars.
+  if (st == DIGITS_CLASSIC_BOLD && area != AREA_DAY) s_shapes = &SHAPES_CLASSIC_BOLD;
 }
 
 // 14-segment capitals (the Modern row's weekday), each `w` x `h`, `pitch` px apart; no ghosts.
@@ -614,6 +622,7 @@ static void load_digit_font(void) {
   uint32_t id;
   switch (s_settings.digit_style) {
     case DIGITS_ICEBERG: id = RESOURCE_ID_FONT_ICEBERG; break;
+    case DIGITS_BEBAS: id = RESOURCE_ID_FONT_BEBAS; break;
     default: return;
   }
   s_font = load_font(id, FG_COUNT);
@@ -754,15 +763,16 @@ static void apply_theme(void) {
   bool inv = s_settings.inverted;
 
   // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
-  // black or silver either way (Case color).
+  // black, silver or a colour of its own either way (Case color).
+  const GColor frame = s_settings.case_custom ? (GColor){ .argb = s_settings.case_argb | 0xC0 }
+      : s_settings.silver ? GColorLightGray : GColorBlack;
   if (s_colors.enabled) {
     for (int i = 0; i < COL_COUNT; i++) s_col[i] = (GColor){ .argb = s_colors.argb[i] | 0xC0 };
-    s_col[COL_CASE] = s_settings.silver ? GColorLightGray : GColorBlack;
+    s_col[COL_CASE] = frame;
   } else {
     const GColor ink = inv ? GColorWhite : GColorBlack;
-    // The case does not depend on the theme.
-    const GColor frame = s_settings.silver ? GColorLightGray : GColorBlack;
-    const GColor frame_text = s_settings.silver ? GColorBlack : GColorWhite;
+    // The case does not depend on the theme; its text is black or white, whichever reads on it.
+    const GColor frame_text = is_dark(frame) ? GColorWhite : GColorBlack;
     for (int i = 0; i < COL_COUNT; i++) s_col[i] = ink;
     s_col[COL_CASE] = frame;
     s_col[COL_TOP_LEFT] = s_col[COL_TOP_RIGHT] = s_col[COL_BADGE] = frame_text;
@@ -1411,6 +1421,8 @@ static void draw_lcd_edge_style(GColor c, int top, int bottom) {
       const int x0 = 66, x1 = LCD_W - 66, rise = 3;
       for (int e = 0; e < 2; e++) {
         const int y = e ? bottom : top, out = e ? 1 : -1;  // out: away from the LCD
+        // The LCD reaches up (down) into the raised section.
+        fill(x0 + 2, e ? y : y + 2 - rise, x1 - x0 - 4, rise, s_lcd, false);
         fill(LCD_X, y, x0 - LCD_X, 2, c, false);
         fill(x1, y, LCD_W - x1, 2, c, false);
         fill(x0 + rise, y + out * rise, x1 - x0 - 2 * rise, 2, c, false);
@@ -1432,8 +1444,12 @@ static void draw_lcd_edge_style(GColor c, int top, int bottom) {
           x = end + 4;
         }
         for (int i = 1; i <= 4; i++) {
-          fill(6 - i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
-          fill(LCD_W - 7 + i, y + in * i + (e ? 1 : 0), 2, 1, c, false);
+          const int row = y + in * i + (e ? 1 : 0);
+          fill(6 - i, row, 2, 1, c, false);
+          fill(LCD_W - 7 + i, row, 2, 1, c, false);
+          // The LCD's corners outside the bends are the case's.
+          fill(0, row, 6 - i, 1, s_col[COL_CASE], false);
+          fill(LCD_W - 5 + i, row, 5 - i, 1, s_col[COL_CASE], false);
         }
       }
       break;
@@ -2033,7 +2049,7 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     static const struct { const char *name; uint8_t style; } STYLES[] = {
       { "dotted", DIGITS_DOTTED }, { "hollow", DIGITS_HOLLOW }, { "iceberg", DIGITS_ICEBERG },
       { "light", DIGITS_MODERN_LIGHT }, { "bold", DIGITS_MODERN_BOLD }, { "matrix", DIGITS_MATRIX },
-      { "matrixdot", DIGITS_MATRIX_DOTTED },
+      { "matrixdot", DIGITS_MATRIX_DOTTED }, { "classicbold", DIGITS_CLASSIC_BOLD }, { "bebas", DIGITS_BEBAS },
     };
     uint8_t style = DIGITS_SEGMENT;
     for (unsigned i = 0; i < ARRAY_LENGTH(STYLES); i++) {
@@ -2050,8 +2066,14 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_CaseColor))) {
+    // "black", "silver", or "custom" (colour in CaseCustom)
     const char *c = t->value->cstring;
     s_settings.silver = strcmp(c, "silver") == 0;
+    s_settings.case_custom = strcmp(c, "custom") == 0;
+    settings_changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_CaseCustom))) {
+    s_settings.case_argb = GColorFromHEX(tuple_int(t) & 0xFFFFFF).argb;  // 0xRRGGBB from the picker
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_Inverted))) {
@@ -2153,6 +2175,7 @@ static void init(void) {
   if (s_settings.edge_style >= EDGE_COUNT) s_settings.edge_style = EDGE_MATCH;
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_PILLS;
   if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
+  if (s_settings.case_custom > 1) s_settings.case_custom = 0;
   load_digit_font();
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));

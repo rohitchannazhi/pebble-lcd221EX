@@ -121,8 +121,13 @@ module.exports = [
         "type": "select", "messageKey": "CaseColor", "label": "Case color", "defaultValue": "black",
         "options": [
           { "label": "Black", "value": "black" },
-          { "label": "Silver", "value": "silver" }
+          { "label": "Silver", "value": "silver" },
+          { "label": "Custom color...", "value": "custom" }
         ]
+      },
+      {
+        "type": "color", "messageKey": "CaseCustom", "label": "Custom case color", "defaultValue": "0055aa",
+        "description": "The top and bottom bar text turns white or black to stay readable (unless Use custom colors is on)."
       },
       {
         "type": "toggle", "messageKey": "Inverted", "label": "Inverted colors",
@@ -134,13 +139,15 @@ module.exports = [
         "description": "Every number on the LCD (not the top and bottom bars), with faint unlit segments or dots. Hollow segments and the Modern styles show the weekday in 14-segment letters; the Dot matrix styles and Dotted segments in dots.",
         "options": [
           { "label": "7-segment", "value": "segment" },
+          { "label": "Classic Bold", "value": "classicbold" },
           { "label": "Dotted segments", "value": "dotted" },
           { "label": "Hollow segments", "value": "hollow" },
           { "label": "Modern Light", "value": "light" },
           { "label": "Modern Bold", "value": "bold" },
           { "label": "Dot matrix", "value": "matrix" },
           { "label": "Dot matrix, dotted clock", "value": "matrixdot" },
-          { "label": "Angular (based on Iceberg)", "value": "iceberg" }
+          { "label": "Angular (based on Iceberg)", "value": "iceberg" },
+          { "label": "Bebas Neue", "value": "bebas" }
         ]
       },
       {

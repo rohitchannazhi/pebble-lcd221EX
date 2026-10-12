@@ -3,7 +3,8 @@
 DSEG fonts by keshikan (SIL Open Font License 1.1, https://github.com/keshikan/DSEG; the
 outlines are a Modified Version, so they don't use the Reserved Font Name "DSEG").
 
-- DSEG7 Modern Light and Bold: the 7 segments (A to G) of the "8", like segments.h's.
+- DSEG7 Modern Light and Bold, and DSEG7 Classic Bold: the 7 segments (A to G) of the "8",
+  like segments.h's.
 - DSEG14 Modern Light and Bold: the 14 segments of the all-segments glyph "~", and for each
   letter A to Z a mask of the segments it lights.
 
@@ -94,6 +95,7 @@ def main():
             emit(o, 'SEG14_MODERN_' + w.upper(), segs)
             o.write('static const uint16_t SEG14_MODERN_%s_LETTERS[26] = { %s };  // A to Z\n'
                     % (w.upper(), ', '.join('0x%04X' % m for m in masks)))
+        emit(o, 'SEG7_CLASSIC_BOLD', seven(d / 'DSEG7-Classic' / 'DSEG7Classic-Bold.ttf'))
     print('wrote src/c/segments_dseg.h')
 
 

@@ -33,6 +33,7 @@
       "TopRightText",
       "BezelLabel",
       "CaseColor",
+      "CaseCustom",
       "Inverted",
       "Ghosts",
       "BacklightColor",
@@ -78,6 +79,7 @@
           "menuIcon": true
         },
         { "type": "raw", "name": "FONT_ICEBERG", "file": "fonts/iceberg.bin" },
+        { "type": "raw", "name": "FONT_BEBAS", "file": "fonts/bebas.bin" },
         { "type": "raw", "name": "FONT_BEZEL", "file": "fonts/bezel.bin" }
       ]
     }

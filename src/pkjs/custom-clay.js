@@ -25,11 +25,13 @@ module.exports = function () {
     timeFormat.on('change', syncHourZero);
     syncHourZero();
 
-    // The colour picker only matters while "Custom color..." is the backlight choice.
-    var backlight = item('BacklightColor'), custom = item('BacklightCustom');
-    function syncCustom() { if (backlight.get() === 'custom') custom.show(); else custom.hide(); }
-    backlight.on('change', syncCustom);
-    syncCustom();
+    // A colour picker only matters while "Custom color..." is the backlight (case) choice.
+    [['BacklightColor', 'BacklightCustom'], ['CaseColor', 'CaseCustom']].forEach(function (pair) {
+      var choice = item(pair[0]), custom = item(pair[1]);
+      function sync() { if (choice.get() === 'custom') custom.show(); else custom.hide(); }
+      choice.on('change', sync);
+      sync();
+    });
 
     // The individual colours only matter while "Use custom colors" is on (they are all in the
     // group "colors"); the Inverted switch is replaced by them then. (Case color always applies.)
