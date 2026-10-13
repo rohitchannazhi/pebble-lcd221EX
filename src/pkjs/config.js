@@ -99,6 +99,11 @@ module.exports = [
         "defaultValue": "WR 3ATM",
         "description": "Shown instead of the step count, in capitals. Leave empty for none.",
         "attributes": { "maxlength": 19, "autocapitalize": "characters" }
+      },
+      {
+        "type": "toggle", "messageKey": "ShowPhoneBattery", "label": "Phone battery",
+        "defaultValue": true,
+        "description": "Your phone's battery level in the middle, small (while the phone is connected; left out when the texts leave no room). Needs a phone whose Pebble app can read its battery level (Android)."
       }
     ]
   },

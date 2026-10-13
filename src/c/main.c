@@ -103,6 +103,7 @@ typedef struct {
   uint8_t weather_box;         // 1: the weather layout (weather in the top row, indicators in the bottom one)
   uint8_t lcd_dots;            // 1: the LCD background dotted (25%) in the unlit segments' colour
   uint8_t show_sun;            // 1: the next sunrise or sunset on the bottom bezel
+  uint8_t show_phone_battery;  // 1: the phone's battery level in the top bezel's middle
 } Settings;
 
 typedef struct {
@@ -183,6 +184,7 @@ static BatteryChargeState s_battery;
 static bool s_connected;
 static int s_steps = -1;
 static int s_hr = -1;  // latest heart rate in BPM, -1 if unavailable
+static int s_phone_battery = -1;  // the phone's battery level (0-100) as the phone last sent it, -1 if not
 
 // Theme (see apply_theme). Normal: black ink on a white LCD. Inverted: white ink
 // on a black LCD. Custom colors: whatever the settings page says. Either way every
@@ -716,8 +718,8 @@ static void font_draw_centered(FontGroup g, char ch, int cx, int baseline, GColo
 // character an upper-cased custom text may use, with capitals 13 px tall, and 11 px for texts
 // too long for 13. A glyph's bitmap starts at the top of the capitals and reaches below the
 // baseline. A text with any other character (an emoji, an accent) uses the system font.
-typedef enum { BG_NORMAL, BG_SMALL, BG_COUNT } BezelGroup;
-static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 11 };
+typedef enum { BG_NORMAL, BG_SMALL, BG_TINY, BG_COUNT } BezelGroup;  // (BG_TINY: digits only)
+static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 11, 9 };
 static uint8_t *s_bezel_font;  // NULL if it couldn't be loaded: the system font is used instead
 
 static bool bezel_font_has(BezelGroup g, const char *text) {
@@ -1744,6 +1746,26 @@ static void draw_battery_icon(GContext *ctx, int x, int y, GColor ink) {
   if (s_battery.is_charging) draw_icon(ctx, x + 7, y + 2, BOLT, 5, fill > 6 ? s_col[COL_CASE] : ink);
 }
 
+// The phone's battery level in the middle of the top bezel, between the left text (ending at
+// `left`) and the right one (starting at `right`): a phone and the level, in the bezel font's
+// smallest size, a row higher than centred to stay clear of the Center tab edge's raised middle.
+// Left out if it doesn't fit (long custom texts).
+static void draw_phone_battery(GContext *ctx, int left, int right) {
+  static const char *const PHONE[] = { "#####", "#...#", "#...#", "#...#", "#...#", "#...#", "#####", "#.#.#", "#####" };
+  enum { ICON_W = 5, GAP = 2, MARGIN = 6 };
+  char text[4];
+  snprintf(text, sizeof(text), "%d", s_phone_battery);
+  if (!bezel_font_has(BG_TINY, text)) return;
+  const int tw = bezel_text_width(BG_TINY, text), w = ICON_W + GAP + tw, x = (LCD_W - w) / 2;
+  if (x - MARGIN < left || x + w + MARGIN > right) return;
+  const int cap_y = (BEZEL_H - BEZEL_CAP[BG_TINY]) / 2 - 1;
+  draw_icon(ctx, x, cap_y, PHONE, ARRAY_LENGTH(PHONE), s_col[COL_TOP_LEFT]);
+  if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
+  bezel_draw_text(BG_TINY, text, x + ICON_W + GAP, cap_y, s_col[COL_TOP_LEFT]);
+  graphics_release_frame_buffer(ctx, s_fb);
+  s_fb = NULL;
+}
+
 // Top bezel: a battery icon and the level, and footprints and the step
 // count; or the custom texts when those are switched off. The right text takes the width it
 // needs (up to TOP_RIGHT_MAX) and the left text gets the rest.
@@ -1792,9 +1814,11 @@ static void draw_top_bezel(GContext *ctx) {
   }
   if (s_settings.show_battery) draw_battery_icon(ctx, 10, TOP_CAP_Y + 1, s_col[COL_TOP_LEFT]);
   draw_bezel_text(ctx, BAR_TOP, gl, left, left_x, right_start - left_x - 4, GTextAlignmentLeft, s_col[COL_TOP_LEFT]);
+  if (s_settings.show_phone_battery && s_connected && s_phone_battery >= 0) {
+    draw_phone_battery(ctx, left_x + bezel_width(gl, left, right_start - left_x - 4), right_start);
+  }
 }
 
-// Bottom bezel: a heart and the latest heart rate, and the custom label.
 // The next sunrise or sunset after `now`, from the last ones the phone sent; any that have passed
 // count as the same time a day (or more) later, as they move only minutes a day. False while
 // none came yet.
@@ -1844,6 +1868,7 @@ static void draw_sun_event(GContext *ctx, int left, int right) {
   draw_bezel_text(ctx, BAR_BOTTOM, BG_SMALL, text, x + ICON_W + GAP, tw, GTextAlignmentLeft, s_col[COL_HEART]);
 }
 
+// Bottom bezel: a heart and the latest heart rate, the next sunrise or sunset, and the custom label.
 static void draw_bottom_bezel(GContext *ctx) {
   static const char *const HEART[] = {
     "..###...###..", ".#####.#####.", "#############", "#############", "#############",
@@ -2374,6 +2399,15 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.lcd_dots = strcmp(t->value->cstring, "dots") == 0;
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_PhoneBattery))) {  // (not a setting: not saved)
+    const int v = tuple_int(t);
+    s_phone_battery = v >= 0 && v <= 100 ? v : -1;
+    if (s_canvas) layer_mark_dirty(s_canvas);
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_ShowPhoneBattery))) {
+    s_settings.show_phone_battery = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_ShowSun))) {
     s_settings.show_sun = tuple_int(t) ? 1 : 0;
     settings_changed = true;
@@ -2460,6 +2494,7 @@ static void init(void) {
     .vibe_disconnect = VIBE_DOUBLE,
     .vibe_connect = VIBE_SHORT,
     .show_sun = 1,
+    .show_phone_battery = 1,
   };
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
@@ -2478,6 +2513,7 @@ static void init(void) {
   if (s_settings.weather_box > 1) s_settings.weather_box = 0;
   if (s_settings.lcd_dots > 1) s_settings.lcd_dots = 0;
   if (s_settings.show_sun > 1) s_settings.show_sun = 1;
+  if (s_settings.show_phone_battery > 1) s_settings.show_phone_battery = 1;
   load_digit_font();
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));

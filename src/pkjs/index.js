@@ -88,9 +88,31 @@ function fetchWeather(minAgeMs) {
   }, { timeout: 15000, maximumAge: 30 * 60 * 1000 });
 }
 
+// The phone's battery level for the top bezel's middle, now and whenever it changes, where the
+// app's JavaScript can read it (the Battery Status API; not on iPhones).
+function watchPhoneBattery() {
+  if (!navigator.getBattery) return;
+  navigator.getBattery().then(function (battery) {
+    var last = -1;
+    function send(retries) {
+      var level = Math.round(battery.level * 100);
+      if (level === last && retries === undefined) return;
+      last = level;
+      Pebble.sendAppMessage({ PhoneBattery: level }, null, function () {
+        if ((retries || 0) < 2) setTimeout(function () { send((retries || 0) + 1); }, 3000);
+      });
+    }
+    send();
+    battery.addEventListener('levelchange', function () { send(); });
+  }).catch(function () { /* not available */ });
+}
+
 // The watch face is opened often (after the menu, a notification...): only fetch if the last
 // reading is old. The watch keeps its own copy and asks again when it needs fresh data.
-Pebble.addEventListener('ready', function () { fetchWeather(MIN_LAUNCH_MS); });
+Pebble.addEventListener('ready', function () {
+  fetchWeather(MIN_LAUNCH_MS);
+  watchPhoneBattery();
+});
 
 Pebble.addEventListener('appmessage', function (e) {
   if (e.payload.RequestWeather) fetchWeather(0);

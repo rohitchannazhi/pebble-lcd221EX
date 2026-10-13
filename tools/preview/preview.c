@@ -312,13 +312,15 @@ __attribute__((export_name("preview_sample"))) void preview_sample(int battery, 
 }
 
 // Starts the face as on the watch with nothing saved, with a sample temperature and range, a
-// partly cloudy sky, and today's and tomorrow's sunrise (6:58) and sunset (18:42).
+// partly cloudy sky, today's and tomorrow's sunrise (6:58) and sunset (18:42), and the phone's
+// battery at 64%.
 __attribute__((export_name("preview_init"))) void preview_init(void) {
   init();
   const time_t midnight = time_start_of_today();
   s_weather = (Weather){ .temp = 174, .temp_min = -32, .temp_max = 214, .has_range = 1, .updated = s_time,
                          .condition = WX_PARTLY,
                          .sun = { midnight + 25080, midnight + 67320, midnight + 86400 + 25020, midnight + 86400 + 67380 } };
+  s_phone_battery = 64;
 }
 
 // Quiet Time on or off (for screenshots and tests).

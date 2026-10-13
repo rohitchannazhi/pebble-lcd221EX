@@ -38,6 +38,8 @@
       "TopRightText",
       "BezelLabel",
       "ShowSun",
+      "PhoneBattery",
+      "ShowPhoneBattery",
       "CaseColor",
       "CaseCustom",
       "Inverted",
