@@ -186,7 +186,7 @@ module.exports = [
       {
         "type": "toggle", "messageKey": "WeatherBox", "label": "Weather layout",
         "defaultValue": false,
-        "description": "The weather's picture and the temperature next to the weekday, and the indicators in the bottom row's right box (without CHG: the battery icon shows charging)."
+        "description": "The weather's picture and the temperature next to the weekday, the indicators in the bottom row's right box (without CHG: the battery icon shows charging), and in 12-hour time the P inside the hour's first digit."
       },
       {
         "type": "select", "messageKey": "LcdBackground", "label": "Screen background", "defaultValue": "plain",

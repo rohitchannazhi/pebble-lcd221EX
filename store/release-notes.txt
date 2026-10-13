@@ -18,6 +18,6 @@ New: Classic Bold (heavier 7-segment digits) and Bebas Neue digit styles.
 New: Case color: any color you pick, besides black and silver; the bezel text stays readable on it.
 Changed: with the Center tab edge the LCD reaches into the tab, and with Notched the case fills the cut corners.
 New: during Quiet Time the colon of the time is a line; the MUTE indicator is gone.
-New: Weather layout (optional): a picture of the weather and the temperature next to the weekday, with the indicators in the bottom right box.
+New: Weather layout (optional): a picture of the weather and the temperature next to the weekday, with the indicators in the bottom right box and the P inside the first digit of the hour.
 New: LCD background: 25% dots, in normal or inverted colors.
 New: the next sunrise or sunset on the bottom bezel, between the heart rate and the label.

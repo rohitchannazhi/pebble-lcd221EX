@@ -448,6 +448,19 @@ static const char PM_BITS[] =
   "###........"
   "###........";
 
+// A smaller P (7x10, as wide as the colon's dots), for between the colon's dots.
+static const char PM_SMALL_BITS[] =
+  "######."
+  "#######"
+  "##...##"
+  "##...##"
+  "#######"
+  "######."
+  "##....."
+  "##....."
+  "##....."
+  "##.....";
+
 // Draws a grid of `cols` x `rows` dots. With `on` false, the '#' dots are drawn
 // as ghosts instead (an unlit fixed LCD symbol).
 static void draw_dots(int x, int y, const char *bits, int cols, int rows, int pitch, int dot, bool on,
@@ -845,6 +858,8 @@ _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels ar
 #define TIME_H 70
 #define PM_X 7    // the PM marker's distance from the LCD's left edge
 #define PM_DY -2  // and how many rows it sits above the top of the digits
+#define PM_IN_DY 12  // the weather layout's P: inside the first digit's upper half, this far below its top
+// (A font's or the dot matrix's leading 0 has no room inside: the P is between the colon's dots then.)
 
 // Row 3: today's low and high (left) and the temperature (right), under a 2px rule.
 #define ROW3_LINE_Y 156
@@ -1062,24 +1077,35 @@ static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, int he
 // How far the Quiet Time colon line reaches beyond the colon's dots, at each end.
 #define QUIET_LINE_EXTRA 3
 
-// The digit font's colon as a line (Quiet Time): as wide as the colon's dots, from a little above
-// the first to a little below the second (the rows of the glyph with ink).
-static void draw_font_colon_line(int cx, int baseline) {
+// The rows of the digit font's colon (from the top of its glyph): the first and last with ink,
+// and the empty ones between its two dots (gap0..gap1).
+static bool font_colon_rows(int *top, int *bottom, int *gap0, int *gap1) {
   const uint8_t *e = font_glyph(FG_TIME, ':');
-  if (!e) return;
+  if (!e) return false;
   const int w = e[1], h = font_height(FG_TIME), stride = (w * 2 + 7) / 8;
   const uint8_t *bits = s_font + le16(e + 4);
-  int top = -1, bottom = -1;
+  *top = *bottom = *gap0 = *gap1 = -1;
   for (int r = 0; r < h; r++) {
-    for (int c = 0; c < w; c++) {
-      if (((bits[r * stride + c / 4] >> (6 - 2 * (c % 4))) & 3) >= 2) {
-        if (top < 0) top = r;
-        bottom = r;
-        break;
-      }
+    bool ink = false;
+    for (int c = 0; c < w && !ink; c++) ink = ((bits[r * stride + c / 4] >> (6 - 2 * (c % 4))) & 3) >= 2;
+    if (!ink) continue;
+    if (*top >= 0 && r > *bottom + 1 && *gap0 < 0) {
+      *gap0 = *bottom + 1;
+      *gap1 = r - 1;
     }
+    if (*top < 0) *top = r;
+    *bottom = r;
   }
-  if (top < 0) return;
+  return *top >= 0;
+}
+
+// The digit font's colon as a line (Quiet Time): as wide as the colon's dots, from a little above
+// the first to a little below the second.
+static void draw_font_colon_line(int cx, int baseline) {
+  const uint8_t *e = font_glyph(FG_TIME, ':');
+  int top, bottom, gap0, gap1;
+  if (!e || !font_colon_rows(&top, &bottom, &gap0, &gap1)) return;
+  const int w = e[1], h = font_height(FG_TIME);
   const int y0 = baseline - h + top - QUIET_LINE_EXTRA, y1 = baseline - h + bottom + 1 + QUIET_LINE_EXTRA;
   fill(cx - w / 2, y0, w, y1 - y0, s_col[COL_COLON], false);
 }
@@ -1119,21 +1145,46 @@ static void draw_time(void) {
     if (hour == 0) hour = 12;
   }
   const int ty = TIME_Y, tw = TIME_W, th = TIME_H;
-  // AM/PM only in 12-hour mode: the P beside the hours, or PM in the indicator box (pm_in_box).
-  const bool zero12 = !is24 && s_settings.pm_in_box;
-  if (!is24 && !zero12) draw_dots(PM_X, ty + PM_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
   // Digit boxes (left edges) and the colon, spread like the original's.
   static const int X[4] = { 6, 49, 108, 153 };
   const int colon_x = 93;
+  // The font styles' glyphs sit FONT_TIME_DX right of the boxes' centres, which centres the time
+  // on the screen.
+  enum { FONT_TIME_DX = 3 };
+  // AM/PM only in 12-hour mode: the P beside the hours, or PM in the indicator box (pm_in_box).
+  // In the weather layout the P is always there, inside the first digit (its 0's upper half), or
+  // with a font's or the dot matrix's leading 0, between the colon's two dots (during Quiet Time,
+  // when the colon is a line, below it).
+  const bool zero12 = !is24 && s_settings.pm_in_box;
+  if (!is24 && s_settings.weather_box) {
+    if (zero12 && (font_active() || s_matrix)) {
+      // The colon's dots (see below): the gap between them, and the bottom of the second.
+      int cx = colon_x + 3, gap0 = ty + th * 36 / 100 + 4, gap1 = ty + th * 70 / 100 - 4;
+      int dot_bottom = ty + th * 70 / 100 + 4 + QUIET_LINE_EXTRA;
+      int top, bottom, g0, g1;
+      if (font_active() && font_colon_rows(&top, &bottom, &g0, &g1) && g0 >= 0) {
+        const int glyph_top = ty + (th - font_height(FG_TIME)) / 2;
+        cx = (X[1] + X[2] + tw) / 2 + FONT_TIME_DX;
+        gap0 = glyph_top + g0;
+        gap1 = glyph_top + g1;
+        dot_bottom = glyph_top + bottom + 1 + QUIET_LINE_EXTRA;
+      }
+      int py = s_quiet ? dot_bottom + 2 : (gap0 + gap1 + 1) / 2 - 5;
+      if (py > ROW3_LINE_Y - 3 - 10) py = ROW3_LINE_Y - 3 - 10;  // clear of the divider
+      draw_dots(cx - 3, py, PM_SMALL_BITS, 7, 10, 1, 1, pm, s_col[COL_PM]);
+    } else {
+      draw_dots(6 + (TIME_W - 11) / 2, ty + PM_IN_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
+    }
+  } else if (!is24 && !zero12) {
+    draw_dots(PM_X, ty + PM_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
+  }
   // 12-hour: the first digit is blank or a 1 (the P sits where a 0 would be). 24-hour: the
   // leading zero is optional.
   int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero) || zero12) ? hour / 10 : DIGIT_BLANK;
   if (font_active()) {
     // Each digit centred in its box, the group centred on the digits' height; the font's colon
-    // is centred on the digits too (tools/gen_fonts.py). The glyphs sit FONT_TIME_DX right of
-    // the boxes' centres, which centres the time on the screen.
+    // is centred on the digits too (tools/gen_fonts.py).
     const int base = ty + (th + font_height(FG_TIME)) / 2;
-    enum { FONT_TIME_DX = 3 };
     const int c0 = X[0] + tw / 2 + FONT_TIME_DX, c1 = X[1] + tw / 2 + FONT_TIME_DX;
     const int c2 = X[2] + tw / 2 + FONT_TIME_DX, c3 = X[3] + tw / 2 + FONT_TIME_DX;
     if (tens != DIGIT_BLANK) font_draw_centered(FG_TIME, '0' + tens, c0, base, s_col[COL_HOURS]);
@@ -1891,27 +1942,33 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_W 41
 #define PILL_H 13
 #define PILL_R 5
+// The weather layout's two pills (BT and DST), bigger, one above the other in the bottom box.
+#define BIG_PILL_W 58
+#define BIG_PILL_H 18
+#define BIG_PILL_R 7
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   // BT and DST on the right, CHG (or PM) on the left, level with the middle of the two. In the
-  // weather layout, one column in the middle of the box: PM (if shown), BT and DST.
-  const int px = (IND_BOTTOM_W - PILL_W) / 2;
+  // weather layout, BT above DST, centred in the box.
+  const bool big = s_settings.weather_box;
+  const int pw = big ? BIG_PILL_W : PILL_W, ph = big ? BIG_PILL_H : PILL_H, pr = big ? BIG_PILL_R : PILL_R;
+  const int bx = (IND_BOTTOM_W - BIG_PILL_W) / 2, by = (IND_BOTTOM_H - 2 * BIG_PILL_H - 4) / 2;
   const uint8_t SLOT[INDICATORS][2] = {
-    { s_settings.weather_box ? px : 44, s_settings.weather_box ? (ind[1].label ? 17 : 8) : 0 },  // BT
-    { s_settings.weather_box ? px : 1, s_settings.weather_box ? 1 : 7 },                           // CHG / PM
-    { s_settings.weather_box ? px : 44, s_settings.weather_box ? (ind[1].label ? 33 : 25) : 15 }, // DST
+    { big ? bx : 44, big ? by : 0 },                    // BT
+    { 1, 7 },                                           // CHG / PM (not in the weather layout)
+    { big ? bx : 44, big ? by + BIG_PILL_H + 4 : 15 },  // DST
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
     const int x = IND_X0 + SLOT[i][0], y = IND_Y0 + SLOT[i][1];
-    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + 2, PILL_W - 4, LABEL_H), false);
+    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + (ph - LABEL_H) / 2, pw - 4, LABEL_H), false);
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
-    for (int yy = y; yy < y + PILL_H; yy++) {
+    for (int yy = y; yy < y + ph; yy++) {
       GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
-      for (int xx = x; xx < x + PILL_W; xx++) {
-        if (!in_round_rect(xx, yy, x, y, PILL_W, PILL_H, PILL_R)) continue;
+      for (int xx = x; xx < x + pw; xx++) {
+        if (!in_round_rect(xx, yy, x, y, pw, ph, pr)) continue;
         if (ind[i].on) {  // fill, with the label cut out of it
           row.data[xx] = row.data[xx] == ind[i].ink.argb ? s_lcd.argb : ind[i].ink.argb;
-        } else if (!in_round_rect(xx, yy, x + 1, y + 1, PILL_W - 2, PILL_H - 2, PILL_R - 1) &&
+        } else if (!in_round_rect(xx, yy, x + 1, y + 1, pw - 2, ph - 2, pr - 1) &&
                    BAYER4[yy & 3][xx & 3] < s_label_off_density) {  // the outline, in dots
           row.data[xx] = s_ghost.argb;
         }
@@ -1989,7 +2046,7 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
 static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
-  const bool pm_cell = !is_24h() && s_settings.pm_in_box;
+  const bool pm_cell = !is_24h() && s_settings.pm_in_box && !s_settings.weather_box;  // (weather: the P)
   // In the order BT, CHG (or PM), DST. (Quiet Time is shown by the colon: a line.)
   const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
