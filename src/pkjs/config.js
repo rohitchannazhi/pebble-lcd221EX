@@ -110,6 +110,11 @@ module.exports = [
         "type": "input", "messageKey": "BezelLabel", "label": "Label", "defaultValue": "PEBBLE",
         "description": "Text on the right of the bottom bezel, shown in capitals. Leave empty for none.",
         "attributes": { "maxlength": 12, "autocapitalize": "characters" }
+      },
+      {
+        "type": "toggle", "messageKey": "ShowSun", "label": "Next sunrise or sunset",
+        "defaultValue": true,
+        "description": "Between the heart rate and the label, with a sun rising or setting (left out when the label leaves no room). From the weather service, for your location."
       }
     ]
   },
@@ -171,11 +176,24 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "pills",
-        "description": "How BT, CHG, DST and MUTE are shown next to the weekday.",
+        "description": "How BT, CHG and DST are shown next to the weekday. During Quiet Time the colon of the time is a line.",
         "options": [
           { "label": "Pills", "value": "pills" },
           { "label": "Active only", "value": "active" },
           { "label": "Icons", "value": "icons" }
+        ]
+      },
+      {
+        "type": "toggle", "messageKey": "WeatherBox", "label": "Weather layout",
+        "defaultValue": false,
+        "description": "The weather's picture and the temperature next to the weekday, and the indicators in the bottom row's right box (without CHG: the battery icon shows charging)."
+      },
+      {
+        "type": "select", "messageKey": "LcdBackground", "label": "Screen background", "defaultValue": "plain",
+        "description": "Dots on a quarter of the background, in the unlit segments' color (light gray, or dark gray with Inverted colors).",
+        "options": [
+          { "label": "Plain", "value": "plain" },
+          { "label": "25% dots", "value": "dots" }
         ]
       },
       {
@@ -230,7 +248,6 @@ module.exports = [
       colorItem("ColBt", "BT", "000000"),
       colorItem("ColChg", "CHG / FULL", "000000"),
       colorItem("ColDst", "DST", "000000"),
-      colorItem("ColMute", "MUTE", "000000"),
       colorHeading("Time"),
       colorItem("ColHours", "Hour digits", "000000"),
       colorItem("ColColon", "Colon", "000000"),

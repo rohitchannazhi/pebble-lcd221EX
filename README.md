@@ -18,11 +18,11 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 |---|---|
 | Top bezel | A battery icon (filled to the level, with a bolt while charging) and the level, and footprints and the step count (in thousands from 1,000: `5.2K`, `12K`), smaller than the custom texts; or your own text instead of either (settings) |
 | Weekday | Dot-matrix day name and the day of the month (`MON 05`) |
-| Indicators | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone, **MUTE** Quiet Time on; as pills, only the active ones, or icons (settings). Inactive ones use the same faint gray as the unlit segments |
-| Time | Large 7-segment digits. A **P** lights up for PM in 12-hour mode |
+| Indicators | **BT** phone connected, **CHG** charging (it becomes **FULL** once the battery is full and the watch is still on the charger), **DST** daylight saving time is in effect in your time zone; as pills, only the active ones, or icons (settings). Inactive ones use the same faint gray as the unlit segments. With the weather layout (settings) this box shows a picture of the weather and the temperature instead, and the indicators (without CHG) move to the right box |
+| Time | Large 7-segment digits. A **P** lights up for PM in 12-hour mode. During Quiet Time the colon is a line |
 | Low / high | Today's low and high temperature side by side, each after a mark (tall arrows, triangles or LO / HI) with a divider between them |
 | Right box | The current temperature (°C or °F) |
-| Bottom bezel | A heart and your latest heart rate, and a text label |
+| Bottom bezel | A heart and your latest heart rate, the next sunrise or sunset (a half sun with an arrow up or down, and the time), and a text label |
 
 Notes:
 
@@ -56,18 +56,21 @@ heart rate and weather are sample values.
 | | Show step count | On. When off, the right text is shown instead |
 | | Right text | `WR 3ATM` (up to 19 characters, capitals; only shown while the step count is off) |
 | Bottom bezel | Label | `PEBBLE` (up to 12 characters, capitals; empty for none) |
+| | Next sunrise or sunset | On (left out when the label leaves no room) |
 | Appearance | Case color | **Black**, Silver, Custom color... (a colour picker; the top and bottom bar text turns white or black to stay readable on it). Applies with custom colors too |
 | | Inverted colors | Off, On (light digits on a dark LCD, like a negative-display watch; the case keeps its color) |
 | | Digit style | Every number on the LCD (the top and bottom bars keep their own text). **7-segment** (the LCD look, with unlit segments, and the dot-matrix weekday); Classic Bold (the same with heavier segments, based on DSEG7 Classic Bold); Dotted segments (the segments made of 2x2 dots, with a dot-matrix weekday and day); Hollow segments (outlined segments, with the weekday row in Modern Bold); Modern Light and Modern Bold (square-cut segments, based on DSEG, with the weekday in 14-segment letters); Dot matrix (5x7 dot-matrix digits like the weekday's letters, and tiny dot letters for the indicators); Dot matrix, dotted clock (the same with the time in dotted segments); Angular (based on Iceberg; a font, without unlit segments, for every text and number on the LCD, which leaves out the right box's degree mark below zero or from 100 up); Bebas Neue (a tall condensed font, used like Angular) |
 | | Divider lines | **Solid**, Segmented (dashes), Ruler ticks (a hairline with ticks), Corner brackets (no lines: brackets at the LCD's four corners and at the two boxes' corners beside the divider), HUD chamfer (the line splits into two 45° arms that meet the divider). The LCD window's top and bottom edges follow the same style (only Solid draws the plain LCD window edge band; Corner brackets leaves just the four corners). The bottom row is centred between the divider and the bottom of the LCD |
 | | Window edge | **Match the dividers** (the edge follows the divider style, as above), Center tab (the line steps out around the middle, with the LCD reaching into it), Notched (broken in three places, ends bent inward, with the case filling the cut corners). The LCD window edge colour (Use custom colors) colours every edge style |
-| | Indicators | **Pills** (one rounded pill each: filled when on, a faint dotted outline when off), Active only (just the labels that are on, right-aligned, two to a column), Icons (Bluetooth, a bolt for charging, a moon for Quiet Time, a sun for DST; PM in the bolt's place with the 12-hour leading zero) |
+| | Indicators | **Pills** (one rounded pill each: filled when on, a faint dotted outline when off), Active only (just the labels that are on, right-aligned, two to a column), Icons (Bluetooth, a bolt for charging, a sun for DST; PM in the bolt's place with the 12-hour leading zero) |
+| | Weather layout | Off. When on, a picture of the weather (sun, moon, partly cloudy by day or night, cloud, rain, snow, storm, fog) and the current temperature sit next to the weekday, and BT, DST (and PM) move to the bottom row's right box |
+| | Screen background | **Plain**, 25% dots (the unlit segments' colour on a quarter of the background's pixels: light gray dots, or dark gray ones with Inverted colors) |
 | | Show unlit segments | On, Off |
 | | Backlight color | **System default** (your watch's normal colour), Amber, Warm white, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, **Custom color...** (shows the app's own color picker, the watch's 64 colors) |
 | Custom colors | Use custom colors | Off. When on, every part of the face except the case (which keeps its **Case color**) takes the color chosen below, and **Inverted colors** is ignored. The pickers start out as the normal black-on-white theme |
 | | Bezels | Top bezel left text, top bezel right text, bottom bezel heart, heart rate, label |
 | | LCD panel | LCD window edge (the lines above and below the LCD, in any Window edge style), LCD background, unlit segments and labels |
-| | Weekday and indicators | Weekday and day, BT, CHG / FULL, DST, MUTE |
+| | Weekday and indicators | Weekday and day, BT, CHG / FULL, DST |
 | | Time | Hour digits, colon, minute digits, PM marker |
 | | Bottom row | Low / high temperature, divider lines, temperature (including the degree mark) |
 | Alerts | Vibrate on phone disconnect | Double pulse (None, Short, Long, Double, Triple, Heartbeat, SOS) |

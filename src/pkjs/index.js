@@ -1,8 +1,9 @@
 // Phone-side code (runs in the Pebble app): the settings page (Clay) and the
 // weather fetch. Weather comes from Open-Meteo using the phone's location and is
 // sent to the watch as the "Temp" app message, with today's low and high as "TempMin" and
-// "TempMax", all in tenths of a degree Celsius (the watch picks Celsius or Fahrenheit); the
-// watch asks for a refresh with "RequestWeather". Clay delivers the settings itself.
+// "TempMax", all in tenths of a degree Celsius (the watch picks Celsius or Fahrenheit), with a
+// picture for the weather ("Condition") and today's and tomorrow's sunrise and sunset (Unix
+// times); the watch asks for a refresh with "RequestWeather". Clay delivers the settings itself.
 
 var Clay = require('pebble-clay');
 var clayConfig = require('./config');
@@ -23,6 +24,18 @@ function rememberWeatherTime() {
   try { localStorage.setItem(STORE_KEY, String(Date.now())); } catch (e) { /* storage unavailable */ }
 }
 
+// The watch's weather pictures (WX_* in main.c) for Open-Meteo's WMO weather codes.
+function condition(code, isDay) {
+  if (code === 0) return isDay ? 1 : 2;                         // clear: sun, or moon
+  if (code === 1 || code === 2) return isDay ? 3 : 4;           // partly cloudy
+  if (code === 3) return 5;                                     // overcast
+  if (code === 45 || code === 48) return 9;                     // fog
+  if (code >= 95) return 8;                                     // thunderstorm
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 7;  // snow
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 6;  // drizzle, rain, showers
+  return 0;                                                     // unknown: no picture
+}
+
 // minAgeMs: skip the fetch if the last successful one is more recent than this.
 function fetchWeather(minAgeMs) {
   if (Date.now() - lastFetch < MIN_FETCH_MS) return;
@@ -32,9 +45,10 @@ function fetchWeather(minAgeMs) {
     var url = 'https://api.open-meteo.com/v1/forecast' +
       '?latitude=' + pos.coords.latitude.toFixed(3) +
       '&longitude=' + pos.coords.longitude.toFixed(3) +
-      '&current=temperature_2m' +
-      '&daily=temperature_2m_min,temperature_2m_max' +
-      '&forecast_days=1&timezone=auto';  // "today" is the local day where the phone is
+      '&current=temperature_2m,weather_code,is_day' +
+      '&daily=temperature_2m_min,temperature_2m_max,sunrise,sunset' +
+      '&forecast_days=2&timezone=auto' +  // "today" is the local day where the phone is
+      '&timeformat=unixtime';
     var xhr = new XMLHttpRequest();
     xhr.onload = function () {
       try {
@@ -50,6 +64,14 @@ function fetchWeather(minAgeMs) {
           msg.TempMin = Math.round(lo * 10);
           msg.TempMax = Math.round(hi * 10);
         }
+        if (typeof cur.weather_code === 'number') msg.Condition = condition(cur.weather_code, cur.is_day === 1);
+        // (Near the poles a day may have no sunrise or sunset: that one is left out.)
+        ['Sunrise', 'Sunset'].forEach(function (key) {
+          var times = daily && daily[key.toLowerCase()];
+          if (!times) return;
+          if (typeof times[0] === 'number') msg[key] = times[0];
+          if (typeof times[1] === 'number') msg[key + '2'] = times[1];
+        });
         Pebble.sendAppMessage(msg);
         rememberWeatherTime();
       } catch (e) {

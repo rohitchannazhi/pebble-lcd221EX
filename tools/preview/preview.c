@@ -92,11 +92,25 @@ int snprintf(char *out, size_t size, const char *fmt, ...) {
   return (int)n;
 }
 
-// The page's clock: preview_time() sets it; every time is "now".
+// The page's clock: preview_time() sets it. Other times (the sunrise and sunset) are "now" moved
+// by the difference, within the same month.
 static time_t s_time;
 static struct tm s_tm;
 time_t time(time_t *t) { if (t) *t = s_time; return s_time; }
-struct tm *localtime(const time_t *t) { return &s_tm; }
+struct tm *localtime(const time_t *t) {
+  static struct tm out;
+  long secs = s_tm.tm_hour * 3600L + s_tm.tm_min * 60 + s_tm.tm_sec + (long)(*t - s_time);
+  long days = secs >= 0 ? secs / 86400 : -((-secs + 86399) / 86400);
+  secs -= days * 86400;
+  out = s_tm;
+  out.tm_hour = (int)(secs / 3600);
+  out.tm_min = (int)(secs / 60 % 60);
+  out.tm_sec = (int)(secs % 60);
+  out.tm_mday += (int)days;
+  out.tm_yday += (int)days;
+  out.tm_wday = (int)(((out.tm_wday + days) % 7 + 7) % 7);
+  return &out;
+}
 
 // ---------------------------------------------------------------------------
 // The SDK: drawing into FB (8-bit ARGB, like the watch's framebuffer).
@@ -184,7 +198,8 @@ size_t resource_load(ResHandle h, uint8_t *buf, size_t n) {
 // The rest of the SDK: made-up readings, and services that do nothing here.
 
 bool clock_is_24h_style(void) { return s_24h; }
-bool quiet_time_is_active(void) { return false; }
+static int s_sample_quiet;  // see preview_quiet()
+bool quiet_time_is_active(void) { return s_sample_quiet; }
 bool speaker_is_muted(void) { return false; }
 static int s_sample_battery = 80, s_sample_steps = 5234;  // see preview_sample()
 BatteryChargeState battery_state_service_peek(void) {
@@ -296,11 +311,21 @@ __attribute__((export_name("preview_sample"))) void preview_sample(int battery, 
   s_sample_steps = steps;
 }
 
-// Starts the face as on the watch with nothing saved, with a sample temperature and range.
+// Starts the face as on the watch with nothing saved, with a sample temperature and range, a
+// partly cloudy sky, and today's and tomorrow's sunrise (6:58) and sunset (18:42).
 __attribute__((export_name("preview_init"))) void preview_init(void) {
   init();
-  s_weather = (Weather){ .temp = 174, .temp_min = -32, .temp_max = 214, .has_range = 1, .updated = s_time };
+  const time_t midnight = time_start_of_today();
+  s_weather = (Weather){ .temp = 174, .temp_min = -32, .temp_max = 214, .has_range = 1, .updated = s_time,
+                         .condition = WX_PARTLY,
+                         .sun = { midnight + 25080, midnight + 67320, midnight + 86400 + 25020, midnight + 86400 + 67380 } };
 }
+
+// Quiet Time on or off (for screenshots and tests).
+__attribute__((export_name("preview_quiet"))) void preview_quiet(int on) { s_sample_quiet = on; }
+
+// Another weather picture (WX_*), after preview_init().
+__attribute__((export_name("preview_condition"))) void preview_condition(int c) { s_weather.condition = c; }
 
 // Other sample weather (tenths of a degree Celsius), after preview_init().
 __attribute__((export_name("preview_weather"))) void preview_weather(int temp, int temp_min, int temp_max) {

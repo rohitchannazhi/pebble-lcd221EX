@@ -99,6 +99,10 @@ typedef struct {
   // Appearance, added later in what was the struct's padding (older saves: see init())
   uint8_t case_custom;         // 1: the case in case_argb instead of black or silver
   uint8_t case_argb;           // GColor8 of the custom case colour
+  // Added after that (older saves are shorter: these keep their defaults)
+  uint8_t weather_box;         // 1: the weather layout (weather in the top row, indicators in the bottom one)
+  uint8_t lcd_dots;            // 1: the LCD background dotted (25%) in the unlit segments' colour
+  uint8_t show_sun;            // 1: the next sunrise or sunset on the bottom bezel
 } Settings;
 
 typedef struct {
@@ -106,7 +110,14 @@ typedef struct {
   time_t updated;
   int16_t temp_min, temp_max;  // today's low and high, tenths of a degree Celsius
   uint8_t has_range;           // 1: temp_min/temp_max came with the last reading
+  // Added after that (older saves are shorter: these stay 0)
+  uint8_t condition;           // WX_NONE or the picture for the current weather (the weather layout)
+  time_t sun[4];               // today's sunrise and sunset, then tomorrow's (0: not known)
 } Weather;
+
+// The weather layout's pictures (sent by the phone as "Condition", from Open-Meteo's weather code).
+enum { WX_NONE = 0, WX_SUN, WX_MOON, WX_PARTLY, WX_PARTLY_NIGHT, WX_CLOUD, WX_RAIN, WX_SNOW, WX_STORM, WX_FOG,
+       WX_COUNT };
 
 // Every part of the face whose colour can be chosen on the settings page ("Custom colors").
 // The order is the order of color_key() and COLOR_DEFAULTS below.
@@ -1048,6 +1059,31 @@ static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, int he
   graphics_release_frame_buffer(ctx, fb);
 }
 
+// How far the Quiet Time colon line reaches beyond the colon's dots, at each end.
+#define QUIET_LINE_EXTRA 3
+
+// The digit font's colon as a line (Quiet Time): as wide as the colon's dots, from a little above
+// the first to a little below the second (the rows of the glyph with ink).
+static void draw_font_colon_line(int cx, int baseline) {
+  const uint8_t *e = font_glyph(FG_TIME, ':');
+  if (!e) return;
+  const int w = e[1], h = font_height(FG_TIME), stride = (w * 2 + 7) / 8;
+  const uint8_t *bits = s_font + le16(e + 4);
+  int top = -1, bottom = -1;
+  for (int r = 0; r < h; r++) {
+    for (int c = 0; c < w; c++) {
+      if (((bits[r * stride + c / 4] >> (6 - 2 * (c % 4))) & 3) >= 2) {
+        if (top < 0) top = r;
+        bottom = r;
+        break;
+      }
+    }
+  }
+  if (top < 0) return;
+  const int y0 = baseline - h + top - QUIET_LINE_EXTRA, y1 = baseline - h + bottom + 1 + QUIET_LINE_EXTRA;
+  fill(cx - w / 2, y0, w, y1 - y0, s_col[COL_COLON], false);
+}
+
 static bool is_24h(void) {
   if (s_settings.time_format == FORMAT_AUTO) return clock_is_24h_style();
   return s_settings.time_format == FORMAT_24H;
@@ -1102,7 +1138,8 @@ static void draw_time(void) {
     const int c2 = X[2] + tw / 2 + FONT_TIME_DX, c3 = X[3] + tw / 2 + FONT_TIME_DX;
     if (tens != DIGIT_BLANK) font_draw_centered(FG_TIME, '0' + tens, c0, base, s_col[COL_HOURS]);
     font_draw_centered(FG_TIME, '0' + hour % 10, c1, base, s_col[COL_HOURS]);
-    font_draw_centered(FG_TIME, ':', (c1 + c2) / 2, base, s_col[COL_COLON]);
+    if (s_quiet) draw_font_colon_line((c1 + c2) / 2, base);
+    else font_draw_centered(FG_TIME, ':', (c1 + c2) / 2, base, s_col[COL_COLON]);
     font_draw_centered(FG_TIME, '0' + s_now.tm_min / 10, c2, base, s_col[COL_MINUTES]);
     font_draw_centered(FG_TIME, '0' + s_now.tm_min % 10, c3, base, s_col[COL_MINUTES]);
     return;
@@ -1119,9 +1156,21 @@ static void draw_time(void) {
   }
   draw_digit(X[1], ty, tw, th, hour % 10, s_col[COL_HOURS]);
   // As on the original, the colon's dots are centred 36% and 70% of the way down the digits.
-  // Dotted digits have a colon of 2x2 dots, hollow ones of hollow squares.
+  // Dotted digits have a colon of 2x2 dots, hollow ones of hollow squares. During Quiet Time it
+  // is a line instead, from a little above the first dot to a little below the second.
   const int dot = 7, dot1 = th * 36 / 100, dot2 = th * 70 / 100;  // dot size; centres below the top
-  for (int k = 0; k < 2; k++) {
+  if (s_quiet) {
+    const int y0 = ty + dot1 - dot / 2 - QUIET_LINE_EXTRA, y1 = ty + dot2 - dot / 2 + dot + QUIET_LINE_EXTRA;
+    if (s_fill == FILL_DOTS) {
+      for (int y = y0 - 1; y + 2 <= y1 + 1; y += 3) {
+        for (int i = 0; i < 3; i++) fill(colon_x + i * 3 - 1, y, 2, 2, s_col[COL_COLON], false);
+      }
+    } else {
+      fill(colon_x, y0, dot, y1 - y0, s_col[COL_COLON], false);
+      if (s_fill == FILL_HOLLOW) fill(colon_x + 2, y0 + 2, dot - 4, y1 - y0 - 4, s_lcd, false);
+    }
+  }
+  for (int k = 0; k < 2 && !s_quiet; k++) {
     const int cy = ty + (k ? dot2 : dot1) - dot / 2;
     if (s_fill == FILL_DOTS) {
       for (int i = 0; i < 9; i++) fill(colon_x + i % 3 * 3 - 1, cy + i / 3 * 3 - 1, 2, 2, s_col[COL_COLON], false);
@@ -1173,6 +1222,16 @@ static void draw_month_day(void) {
 // The right box: the temperature. A half-width sign slot (minus, or the
 // "1" of 100+ in Fahrenheit) followed by two digits, so -99..199 all fit; "--"
 // while there is no recent weather.
+// Degree mark: a round 7x7 ring, 2px thick.
+static const char DEGREE_BITS[] =
+  "..###.."
+  ".#####."
+  "##...##"
+  "##...##"
+  "##...##"
+  ".#####."
+  "..###..";
+
 static void draw_temperature(void) {
   const GColor ink = s_col[COL_RIGHT];
   const int dy = row3_base(ROW3_H) - ROW3_H, dh = ROW3_H;
@@ -1211,15 +1270,6 @@ static void draw_temperature(void) {
     draw_digit(TEMP_D1_X, dy, w, dh, tens, ink);
     draw_digit(TEMP_D2_X, dy, w, dh, v % 10, ink);
   }
-  // Degree mark: a round 7x7 ring, 2px thick.
-  static const char DEGREE_BITS[] =
-    "..###.."
-    ".#####."
-    "##...##"
-    "##...##"
-    "##...##"
-    ".#####."
-    "..###..";
   draw_dots(TEMP_DEG_X, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
@@ -1505,6 +1555,90 @@ static void draw_lcd_edges(void) {
   }
 }
 
+static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density);
+
+// The weather layout's top row, right of the weekday: a picture of the weather and the current
+// temperature in the digit style (two digits 28 px tall, a minus slot, the degree mark; no
+// picture while there is no recent weather).
+#define WX_ICON_X 111  // the picture's left edge (or further right, clear of a font's weekday)
+static void draw_weather_box(void) {
+  static const char *const SUN[] = { ".....#.....", "..#.....#..", "....###....", "...#####...", "..#######..",
+    "#.#######.#", "..#######..", "...#####...", "....###....", "..#.....#..", ".....#....." };
+  static const char *const MOON[] = { "...####....", ".####......", ".##........", "##.........", "##.........",
+    "##.........", "##........#", ".##......##", ".#########.", "...#####..." };
+  static const char *const PARTLY[] = { ".......#...", "....#.....#", "......###..", "...#.#####.", "..###.###..",
+    ".#####.#..#", "#######....", "#########..", "#########..", ".#######..." };
+  static const char *const PARTLY_NIGHT[] = { "......####.", ".....##....", "....##.....", "...#.#.....",
+    "..###.#...#", ".#####.###.", "#######....", "#########..", "#########..", ".#######..." };
+  static const char *const CLOUD[] = { "....###....", "...#####...", ".##########", "###########", "###########",
+    ".#########." };
+  static const char *const RAIN[] = { "....###....", "...#####...", ".##########", "###########", "###########",
+    ".#########.", "...........", "..#..#..#..", ".#..#..#...", "#..#..#...." };
+  static const char *const SNOW[] = { "....###....", "...#####...", ".##########", "###########", "###########",
+    ".#########.", "...........", ".#...#...#.", "...#...#...", ".#...#...#." };
+  static const char *const STORM[] = { "....###....", "...#####...", ".##########", "###########", "###########",
+    ".#########.", ".....##....", "....##.....", "...####....", ".....##....", "....##....." };
+  static const char *const FOG[] = { "###########", "...........", ".#########.", "...........", "###########",
+    "...........", ".#########." };
+  static const struct { const char *const *rows; uint8_t n; } ICONS[WX_COUNT] = {
+    [WX_SUN] = { SUN, ARRAY_LENGTH(SUN) }, [WX_MOON] = { MOON, ARRAY_LENGTH(MOON) },
+    [WX_PARTLY] = { PARTLY, ARRAY_LENGTH(PARTLY) }, [WX_PARTLY_NIGHT] = { PARTLY_NIGHT, ARRAY_LENGTH(PARTLY_NIGHT) },
+    [WX_CLOUD] = { CLOUD, ARRAY_LENGTH(CLOUD) }, [WX_RAIN] = { RAIN, ARRAY_LENGTH(RAIN) },
+    [WX_SNOW] = { SNOW, ARRAY_LENGTH(SNOW) }, [WX_STORM] = { STORM, ARRAY_LENGTH(STORM) },
+    [WX_FOG] = { FOG, ARRAY_LENGTH(FOG) },
+  };
+  const GColor ink = s_col[COL_RIGHT];
+  const int y = BOX_TOP, h = BOX_BOTTOM - BOX_TOP;
+  const bool valid = weather_valid();
+  const int temp = display_temp(s_weather.temp), v = abs(temp);
+  const bool neg = valid && temp < 0;
+  int icon_x = WX_ICON_X;
+  if (font_active()) {  // clear of the weekday and day of the month ("MON 05")
+    const int end = WEEKDAY_X + font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + 4 + font_text_width(FG_WEEKDAY, "00");
+    if (end + 4 > icon_x) icon_x = end + 4;
+  }
+  const int c = s_weather.condition;
+  if (valid && c > WX_NONE && c < WX_COUNT) {
+    draw_icon_2x(icon_x, y + (h - 2 * ICONS[c].n) / 2, ICONS[c].rows, ICONS[c].n, ink, DENSITY_FULL);
+  }
+  if (font_active()) {  // right-aligned, before the degree mark
+    char text[6];
+    if (valid) snprintf(text, sizeof(text), "%d", temp);
+    else snprintf(text, sizeof(text), "--");
+    const int tw = font_text_width(FG_DATE, text);
+    font_draw_text(FG_DATE, text, 183 - tw, 0, y + (h + font_height(FG_DATE)) / 2, ALIGN_LEFT, ink, DENSITY_FULL);
+    draw_dots(185, y + 1, DEGREE_BITS, 7, 7, 1, 1, true, ink);
+    return;
+  }
+  if (s_matrix) {  // the day of the month's 5x5 digits
+    if (neg) draw_matrix_sign(136, y, h, false, 3, ink);
+    if (!valid || v >= 10) draw_matrix(148, y, MATRIX_DIGITS_5X5[valid ? v / 10 % 10 : 0], 5, 5, 3, 6, 2, 5, ink);
+    draw_matrix(165, y, MATRIX_DIGITS_5X5[valid ? v % 10 : 0], 5, 5, 3, 6, 2, 5, ink);
+  } else {
+    draw_segments(136, y, 9, h, neg ? SEG_G : 0, SEG_G, ink);
+    draw_digit(147, y, 15, h, !valid ? DIGIT_MINUS : v >= 10 ? v / 10 % 10 : DIGIT_BLANK, ink);
+    draw_digit(165, y, 15, h, !valid ? DIGIT_MINUS : v % 10, ink);
+  }
+  draw_dots(184, y, DEGREE_BITS, 7, 7, 1, 1, true, ink);
+}
+
+// The dotted LCD background: the unlit segments' colour on a quarter of the background's pixels
+// (the same ordered dither as the unlit segments), wherever the background shows, in the LCD and
+// the Center tab edge's raised middle.
+#define LCD_DOTS_DENSITY 4
+static void draw_lcd_dots(void) {
+  const bool tab = s_settings.edge_style == EDGE_TAB;
+  for (int y = LCD_Y - 3; y < LCD_Y + LCD_H + 3; y++) {
+    const bool in_lcd = y >= LCD_Y && y < LCD_Y + LCD_H;
+    if (!in_lcd && !tab) continue;
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y);
+    const int x0 = in_lcd ? LCD_X : 68, x1 = in_lcd ? LCD_X + LCD_W : LCD_W - 68;
+    for (int x = x0; x < x1; x++) {
+      if (row.data[x] == s_lcd.argb && BAYER4[y & 3][x & 3] < LCD_DOTS_DENSITY) row.data[x] = s_ghost.argb;
+    }
+  }
+}
+
 // Everything on the white LCD panel, drawn straight into the framebuffer.
 static void draw_lcd(void) {
   draw_lcd_edges();
@@ -1523,7 +1657,9 @@ static void draw_lcd(void) {
   use_digits(AREA_OTHER);
   draw_rules();
   draw_temperature_range();
-  draw_temperature();
+  if (s_settings.weather_box) draw_weather_box();
+  else draw_temperature();
+  if (s_settings.lcd_dots) draw_lcd_dots();
 }
 
 // A small 1-bit picture ('#' = ink), drawn pixel by pixel through the graphics API.
@@ -1600,6 +1736,53 @@ static void draw_top_bezel(GContext *ctx) {
 }
 
 // Bottom bezel: a heart and the latest heart rate, and the custom label.
+// The next sunrise or sunset after `now`, from the last ones the phone sent; any that have passed
+// count as the same time a day (or more) later, as they move only minutes a day. False while
+// none came yet.
+static bool next_sun_event(time_t now, time_t *when, bool *rise) {
+  time_t best = 0;
+  for (int i = 0; i < 4; i++) {
+    time_t t = s_weather.sun[i];
+    if (t <= 0) continue;
+    if (t <= now) t += ((now - t) / 86400 + 1) * 86400;
+    if (!best || t < best) {
+      best = t;
+      *rise = i % 2 == 0;
+    }
+  }
+  *when = best;
+  return best != 0;
+}
+
+// The next sunrise or sunset on the bottom bezel, centred between the heart rate (ending at
+// `left`) and the label (starting at `right`): a half sun with an arrow up or down, and the time
+// in the heart rate's font and colour. Left out if it doesn't fit.
+static void draw_sun_event(GContext *ctx, BezelGroup g, int left, int right) {
+  static const char *const SUNRISE[] = {
+    "......#......", ".....###.....", "....#####....", "......#......", "......#......", ".............",
+    "...#######...", "..#########..", ".###########.", ".............", "#############",
+  };
+  static const char *const SUNSET[] = {
+    "......#......", "......#......", "....#####....", ".....###.....", "......#......", ".............",
+    "...#######...", "..#########..", ".###########.", ".............", "#############",
+  };
+  enum { ICON_W = 13, GAP = 3, MARGIN = 6 };
+  time_t when;
+  bool rise;
+  if (!next_sun_event(time(NULL), &when, &rise)) return;
+  const struct tm *t = localtime(&when);
+  char text[8];
+  int hour = t->tm_hour;
+  if (!is_24h()) hour = hour % 12 ? hour % 12 : 12;
+  if (is_24h() && !s_settings.hour_no_zero) snprintf(text, sizeof(text), "%02d:%02d", hour, t->tm_min);
+  else snprintf(text, sizeof(text), "%d:%02d", hour, t->tm_min);
+  const int tw = bezel_width(g, text, 60), w = ICON_W + GAP + tw;
+  if (right - left - 2 * MARGIN < w) return;
+  const int x = (left + right - w) / 2;
+  draw_icon(ctx, x, BOTTOM_CAP_Y + 1, rise ? SUNRISE : SUNSET, ARRAY_LENGTH(SUNRISE), s_col[COL_HEART]);
+  draw_bezel_text(ctx, BAR_BOTTOM, g, text, x + ICON_W + GAP, tw, GTextAlignmentLeft, s_col[COL_HEART]);
+}
+
 static void draw_bottom_bezel(GContext *ctx) {
   static const char *const HEART[] = {
     "..###...###..", ".#####.#####.", "#############", "#############", "#############",
@@ -1613,18 +1796,25 @@ static void draw_bottom_bezel(GContext *ctx) {
   const BezelGroup g = bezel_fits(BG_NORMAL, s_settings.bezel_label, 120) ? BG_NORMAL : BG_SMALL;
   draw_bezel_text(ctx, BAR_BOTTOM, g, hr_text, 30, 40, GTextAlignmentLeft, s_col[COL_HEART]);
   draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
+  if (s_settings.show_sun) draw_sun_event(ctx, g, 30 + bezel_width(g, hr_text, 40),
+                                          190 - bezel_width(g, s_settings.bezel_label, 120));
 }
 
-// One indicator: its label, whether it is on, and its colour when on.
+#define INDICATORS 3  // BT, CHG (or PM) and DST
+
+// One indicator: its label (NULL: not shown in this layout), whether it is on, and its colour when on.
 typedef struct {
   const char *label;
   bool on;
   GColor ink;
 } Indicator;
 
-// The top-left corner of the area the indicator styles share.
-#define IND_X0 107
-#define IND_Y0 BOX_TOP
+// The top-left corner of the area the indicator styles share: right of the weekday, or (the
+// weather layout) the bottom row's right box, IND_BOTTOM_W x IND_BOTTOM_H.
+#define IND_X0 (s_settings.weather_box ? ROW3_DIV_X + 2 : 107)
+#define IND_Y0 (s_settings.weather_box ? ROW3_LINE_Y + 2 : BOX_TOP)
+#define IND_BOTTOM_W (LCD_W - ROW3_DIV_X - 2)
+#define IND_BOTTOM_H (LCD_Y + LCD_H - ROW3_LINE_Y - 2)
 
 // The "Dot matrix" style's indicator labels: 3x5 letters of 2x2 px dots (10 px tall), 2 px apart.
 static const char *tiny_letter(char ch) {
@@ -1702,10 +1892,16 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_H 13
 #define PILL_R 5
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // CHG and MUTE on the left, BT and DST on the right.
-  static const uint8_t SLOT[4][2] = { { 44, 0 }, { 1, 0 }, { 44, 15 }, { 1, 15 } };  // BT, CHG, DST, MUTE
-  for (int i = 0; i < 4; i++) {
-    if (!ind[i].on && !s_settings.ghosts) continue;
+  // BT and DST on the right, CHG (or PM) on the left, level with the middle of the two. In the
+  // weather layout, one column in the middle of the box: PM (if shown), BT and DST.
+  const int px = (IND_BOTTOM_W - PILL_W) / 2;
+  const uint8_t SLOT[INDICATORS][2] = {
+    { s_settings.weather_box ? px : 44, s_settings.weather_box ? (ind[1].label ? 17 : 8) : 0 },  // BT
+    { s_settings.weather_box ? px : 1, s_settings.weather_box ? 1 : 7 },                           // CHG / PM
+    { s_settings.weather_box ? px : 44, s_settings.weather_box ? (ind[1].label ? 33 : 25) : 15 }, // DST
+  };
+  for (int i = 0; i < INDICATORS; i++) {
+    if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
     const int x = IND_X0 + SLOT[i][0], y = IND_Y0 + SLOT[i][1];
     draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + 2, PILL_W - 4, LABEL_H), false);
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
@@ -1727,11 +1923,18 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
 }
 
 // Active only: the labels of the indicators that are on, right-aligned, two to a column (the
-// right column first). Nothing is shown for the others.
+// right column first); in the weather layout, centred one above the other. Nothing is shown for
+// the others.
 static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
-  int n = 0;
-  for (int i = 0; i < 4; i++) {
-    if (!ind[i].on) continue;
+  int n = 0, count = 0;
+  for (int i = 0; i < INDICATORS; i++) count += ind[i].label && ind[i].on;
+  for (int i = 0; i < INDICATORS; i++) {
+    if (!ind[i].label || !ind[i].on) continue;
+    if (s_settings.weather_box) {
+      const int y = IND_Y0 + (IND_BOTTOM_H - (16 * count - 4)) / 2 + 16 * n++;
+      draw_indicator_label(ctx, &ind[i], GRect(IND_X0 + 4, y, IND_BOTTOM_W - 8, 12), false);
+      continue;
+    }
     const int right = n < 2 ? BOX_RIGHT + 1 : BOX_DIV - 2;  // right edge of the column
     draw_indicator_label(ctx, &ind[i], GRect(right - 42, IND_Y0 + 1 + (n % 2) * 15, 42, 12), true);
     n++;
@@ -1755,25 +1958,28 @@ static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c,
 static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_cell) {
   static const char *const BT[] = { "..#..", "..##.", "#.#.#", ".###.", "..#..", ".###.", "#.#.#", "..##.", "..#.." };
   static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
-  static const char *const MOON[] = { "..###", ".##..", "##...", "##...", "##...", "##...", ".##..", "..###" };
   static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
                                      "..#####..", "...###...", ".#.....#.", "....#...." };
+  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown).
+  const bool wx = s_settings.weather_box;
+  const int top = wx ? IND_Y0 + (pm_cell ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
   struct { const char *const *rows; int n; int x; int ind; } icon[] = {
-    { BT, ARRAY_LENGTH(BT), IND_X0 + 3, 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 23, 1 },
-    { MOON, ARRAY_LENGTH(MOON), IND_X0 + 44, 3 }, { SUN, ARRAY_LENGTH(SUN), IND_X0 + 63, 2 },
+    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : 10), 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 36, 1 },
+    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : 60), 2 },
   };
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
     const Indicator *it = &ind[icon[k].ind];
-    if (k == 1 && pm_cell) continue;  // PM is a label, drawn below
+    if (k == 1 && (pm_cell || wx)) continue;  // PM is a label, drawn below; no CHG in the weather layout
     if (!it->on && !s_settings.ghosts) continue;
-    draw_icon_2x(icon[k].x, IND_Y0 + 5 + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
+    draw_icon_2x(icon[k].x, top + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
                  it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
   }
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
   if (pm_cell && (ind[1].on || s_settings.ghosts)) {
-    draw_indicator_label(ctx, &ind[1], GRect(IND_X0 + 18, IND_Y0 + 9, 24, LABEL_H), false);
+    const GRect cell = wx ? GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H) : GRect(IND_X0 + 24, IND_Y0 + 9, 24, LABEL_H);
+    draw_indicator_label(ctx, &ind[1], cell, false);
   }
 }
 
@@ -1784,14 +1990,14 @@ static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   const bool pm_cell = !is_24h() && s_settings.pm_in_box;
-  // In the order BT, CHG (or PM), DST, MUTE.
-  const Indicator ind[] = {
+  // In the order BT, CHG (or PM), DST. (Quiet Time is shown by the colon: a line.)
+  const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
     // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
-    { pm_cell ? "PM" : full ? "FULL" : "CHG", pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full,
-      pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
+    // The weather layout has no CHG: the battery icon's bolt shows it.
+    { pm_cell ? "PM" : s_settings.weather_box ? NULL : full ? "FULL" : "CHG",
+      pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full, pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
     { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
-    { "MUTE", s_quiet, s_col[COL_MUTE] },
   };
   switch (s_settings.indicator_style) {
     case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
@@ -1970,8 +2176,21 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     const time_t before = s_weather.updated;
     const int day_before = before == 0 ? -1 : localtime(&before)->tm_yday;
     const bool new_day = day_before != localtime(&now)->tm_yday;
-    const bool changed = temp != s_weather.temp || has_range != s_weather.has_range ||
-                         temp_min != s_weather.temp_min || temp_max != s_weather.temp_max || new_day;
+    bool changed = temp != s_weather.temp || has_range != s_weather.has_range ||
+                   temp_min != s_weather.temp_min || temp_max != s_weather.temp_max || new_day;
+    // The weather layout's picture, and the sunrises and sunsets (Unix times).
+    if ((t = dict_find(iter, MESSAGE_KEY_Condition))) {
+      const int c = tuple_int(t);
+      const uint8_t condition = c > WX_NONE && c < WX_COUNT ? c : WX_NONE;
+      changed |= condition != s_weather.condition;
+      s_weather.condition = condition;
+    }
+    const uint32_t sun_keys[4] = { MESSAGE_KEY_Sunrise, MESSAGE_KEY_Sunset, MESSAGE_KEY_Sunrise2, MESSAGE_KEY_Sunset2 };
+    for (int i = 0; i < 4; i++) {
+      if (!(t = dict_find(iter, sun_keys[i]))) continue;
+      changed |= (time_t)tuple_int(t) != s_weather.sun[i];
+      s_weather.sun[i] = (time_t)tuple_int(t);
+    }
     s_weather.temp = temp;
     s_weather.temp_min = temp_min;
     s_weather.temp_max = temp_max;
@@ -2080,6 +2299,18 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.inverted = tuple_int(t);
     settings_changed = true;
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_WeatherBox))) {
+    s_settings.weather_box = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_LcdBackground))) {
+    s_settings.lcd_dots = strcmp(t->value->cstring, "dots") == 0;
+    settings_changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_ShowSun))) {
+    s_settings.show_sun = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_Ghosts))) {
     s_settings.ghosts = tuple_int(t);
     settings_changed = true;
@@ -2161,10 +2392,11 @@ static void init(void) {
     .backlight = BACKLIGHT_SYSTEM,
     .vibe_disconnect = VIBE_DOUBLE,
     .vibe_connect = VIBE_SHORT,
+    .show_sun = 1,
   };
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
-  } else if (persist_get_size(SETTINGS_KEY_SHARED) == (int)sizeof(s_settings)) {
+  } else if (persist_get_size(SETTINGS_KEY_SHARED) == (int)offsetof(Settings, weather_box)) {  // its size then
     // Saved by the build that put Settings under the colours' key: moved to its own key. (The
     // colours it overwrote are lost; they come back with the next Save on the settings page.)
     persist_read_data(SETTINGS_KEY_SHARED, &s_settings, sizeof(s_settings));
@@ -2176,10 +2408,14 @@ static void init(void) {
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_PILLS;
   if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   if (s_settings.case_custom > 1) s_settings.case_custom = 0;
+  if (s_settings.weather_box > 1) s_settings.weather_box = 0;
+  if (s_settings.lcd_dots > 1) s_settings.lcd_dots = 0;
+  if (s_settings.show_sun > 1) s_settings.show_sun = 1;
   load_digit_font();
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
   if (s_weather.has_range > 1) s_weather.has_range = 0;
+  if (s_weather.condition >= WX_COUNT) s_weather.condition = WX_NONE;
   s_colors.enabled = 0;
   memcpy(s_colors.argb, COLOR_DEFAULTS, sizeof(s_colors.argb));
   // (Only data of the colours' own size: the key once held Settings by mistake.)
