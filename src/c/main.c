@@ -1385,8 +1385,8 @@ static void draw_range_value(int x, int t10, bool valid, bool high, GColor ink) 
         draw_small_letters(x, cy - 5, high ? "HI" : "LO", ink);
       }
       break;
-    default:  // a tall arrow: 26 px, a 7 px head 11 px wide and a 2 px shaft
-      draw_arrow(x + 5, cy - 13, high, 26, 7, 11, 2, ink);
+    default:  // a tall arrow: 26 px, an 8 px head 13 px wide and a 3 px shaft
+      draw_arrow(x + 5, cy - 13, high, 26, 8, 13, 3, ink);
   }
   if (font_active()) {
     // Right-aligned after the mark, with a below-zero minus as a short bar just before the digits
@@ -1609,28 +1609,37 @@ static void draw_lcd_edges(void) {
 static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density);
 
 // The weather layout's top row, right of the weekday: a picture of the weather and the current
-// temperature in the digit style (two digits 28 px tall, a minus slot, the degree mark; no
-// picture while there is no recent weather).
-#define WX_ICON_X 111  // the picture's left edge (or further right, clear of a font's weekday)
+// temperature in the digit style (two digits WX_H px tall, a minus slot, the degree mark; no
+// picture while there is no recent weather). It reaches below the weekday, down to WX_H.
+#define WX_ICON_X 110  // the picture's left edge (or further right, clear of a font's weekday)
+#define WX_H 34        // from BOX_TOP
 static void draw_weather_box(void) {
-  static const char *const SUN[] = { ".....#.....", "..#.....#..", "....###....", "...#####...", "..#######..",
-    "#.#######.#", "..#######..", "...#####...", "....###....", "..#.....#..", ".....#....." };
-  static const char *const MOON[] = { "...####....", ".####......", ".##........", "##.........", "##.........",
-    "##.........", "##........#", ".##......##", ".#########.", "...#####..." };
-  static const char *const PARTLY[] = { ".......#...", "....#.....#", "......###..", "...#.#####.", "..###.###..",
-    ".#####.#..#", "#######....", "#########..", "#########..", ".#######..." };
-  static const char *const PARTLY_NIGHT[] = { "......####.", ".....##....", "....##.....", "...#.#.....",
-    "..###.#...#", ".#####.###.", "#######....", "#########..", "#########..", ".#######..." };
-  static const char *const CLOUD[] = { "....###....", "...#####...", ".##########", "###########", "###########",
-    ".#########." };
-  static const char *const RAIN[] = { "....###....", "...#####...", ".##########", "###########", "###########",
-    ".#########.", "...........", "..#..#..#..", ".#..#..#...", "#..#..#...." };
-  static const char *const SNOW[] = { "....###....", "...#####...", ".##########", "###########", "###########",
-    ".#########.", "...........", ".#...#...#.", "...#...#...", ".#...#...#." };
-  static const char *const STORM[] = { "....###....", "...#####...", ".##########", "###########", "###########",
-    ".#########.", ".....##....", "....##.....", "...####....", ".....##....", "....##....." };
-  static const char *const FOG[] = { "###########", "...........", ".#########.", "...........", "###########",
-    "...........", ".#########." };
+  // 13x13 pictures, drawn at twice the size.
+  static const char *const SUN[] = { "......#......", ".#....#....#.", "..#.......#..", ".....###.....",
+    "....#####....", "...#######...", "##.#######.##", "...#######...", "....#####....", ".....###.....",
+    "..#.......#..", ".#....#....#.", "......#......" };
+  static const char *const MOON[] = { "....#####....", "..####.......", ".###.........", ".##..........",
+    "###..........", "###..........", "###..........", "###.........#", ".###.......##", ".#####...###.",
+    "..#########..", "....#####...." };
+  static const char *const PARTLY[] = { ".........#...", "......#.....#", "........###..", ".......#####.",
+    "...###.#####.", "..#####.###..", ".#######.....", ".########....", "###########..", "############.",
+    "############.", ".##########.." };
+  static const char *const PARTLY_NIGHT[] = { "..........##.", "........##...", ".......##....", ".......##....",
+    "...###..##...", "..#####..####", ".#######.....", ".########....", "###########..", "############.",
+    "############.", ".##########.." };
+  static const char *const CLOUD[] = { "......###....", "....#######..", "..##########.", ".############",
+    "#############", "#############", ".###########." };
+  static const char *const RAIN[] = { "......###....", "....#######..", "..##########.", ".############",
+    "#############", "#############", ".###########.", ".............", "..#...#...#..", ".#...#...#...",
+    "#...#...#...." };
+  static const char *const SNOW[] = { "......###....", "....#######..", "..##########.", ".############",
+    "#############", "#############", ".###########.", ".............", ".#...#...#...", "...#...#...#.",
+    ".#...#...#..." };
+  static const char *const STORM[] = { "......###....", "....#######..", "..##########.", ".############",
+    "#############", "#############", ".###########.", "......##.....", ".....##......", "....#####....",
+    "......##.....", ".....##......" };
+  static const char *const FOG[] = { "#############", ".............", "..##########.", ".............",
+    "#############", ".............", ".##########.." };
   static const struct { const char *const *rows; uint8_t n; } ICONS[WX_COUNT] = {
     [WX_SUN] = { SUN, ARRAY_LENGTH(SUN) }, [WX_MOON] = { MOON, ARRAY_LENGTH(MOON) },
     [WX_PARTLY] = { PARTLY, ARRAY_LENGTH(PARTLY) }, [WX_PARTLY_NIGHT] = { PARTLY_NIGHT, ARRAY_LENGTH(PARTLY_NIGHT) },
@@ -1639,37 +1648,36 @@ static void draw_weather_box(void) {
     [WX_FOG] = { FOG, ARRAY_LENGTH(FOG) },
   };
   const GColor ink = s_col[COL_RIGHT];
-  const int y = BOX_TOP, h = BOX_BOTTOM - BOX_TOP;
+  const int y = BOX_TOP, h = WX_H;
   const bool valid = weather_valid();
   const int temp = display_temp(s_weather.temp), v = abs(temp);
   const bool neg = valid && temp < 0;
   int icon_x = WX_ICON_X;
   if (font_active()) {  // clear of the weekday and day of the month ("MON 05")
     const int end = WEEKDAY_X + font_text_width(FG_WEEKDAY, DAYS[s_now.tm_wday]) + 4 + font_text_width(FG_WEEKDAY, "00");
-    if (end + 4 > icon_x) icon_x = end + 4;
+    if (end + 3 > icon_x) icon_x = end + 3;
   }
   const int c = s_weather.condition;
   if (valid && c > WX_NONE && c < WX_COUNT) {
     draw_icon_2x(icon_x, y + (h - 2 * ICONS[c].n) / 2, ICONS[c].rows, ICONS[c].n, ink, DENSITY_FULL);
   }
-  if (font_active()) {  // right-aligned, before the degree mark
+  if (font_active()) {  // right-aligned before the degree mark, centred on the digits' height
     char text[6];
     if (valid) snprintf(text, sizeof(text), "%d", temp);
     else snprintf(text, sizeof(text), "--");
-    const int tw = font_text_width(FG_DATE, text);
-    font_draw_text(FG_DATE, text, 183 - tw, 0, y + (h + font_height(FG_DATE)) / 2, ALIGN_LEFT, ink, DENSITY_FULL);
-    draw_dots(185, y + 1, DEGREE_BITS, 7, 7, 1, 1, true, ink);
+    const int tw = font_text_width(FG_RANGE, text);
+    font_draw_text(FG_RANGE, text, 182 - tw, 0, y + (h + font_height(FG_RANGE)) / 2, ALIGN_LEFT, ink, DENSITY_FULL);
+    draw_dots(184, y + (h - font_height(FG_RANGE)) / 2, DEGREE_BITS, 7, 7, 1, 1, true, ink);
     return;
   }
-  if (s_matrix) {  // the day of the month's 5x5 digits
-    if (neg) draw_matrix_sign(136, y, h, false, 3, ink);
-    if (!valid || v >= 10) draw_matrix(148, y, MATRIX_DIGITS_5X5[valid ? v / 10 % 10 : 0], 5, 5, 3, 6, 2, 5, ink);
-    draw_matrix(165, y, MATRIX_DIGITS_5X5[valid ? v % 10 : 0], 5, 5, 3, 6, 2, 5, ink);
+  // The minus slot, then two digits 16 px wide (segments, or the 5x7 dot matrix).
+  if (s_matrix) {
+    if (neg) draw_matrix_sign(139, y, h, false, 3, ink);
   } else {
-    draw_segments(136, y, 9, h, neg ? SEG_G : 0, SEG_G, ink);
-    draw_digit(147, y, 15, h, !valid ? DIGIT_MINUS : v >= 10 ? v / 10 % 10 : DIGIT_BLANK, ink);
-    draw_digit(165, y, 15, h, !valid ? DIGIT_MINUS : v % 10, ink);
+    draw_segments(139, y, 7, h, neg ? SEG_G : 0, SEG_G, ink);
   }
+  draw_digit(148, y, 16, h, !valid ? DIGIT_MINUS : v >= 10 ? v / 10 % 10 : DIGIT_BLANK, ink);
+  draw_digit(166, y, 16, h, !valid ? DIGIT_MINUS : v % 10, ink);
   draw_dots(184, y, DEGREE_BITS, 7, 7, 1, 1, true, ink);
 }
 
