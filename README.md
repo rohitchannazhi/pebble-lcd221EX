@@ -22,7 +22,7 @@ Version 1.4.0. Pebble Time 2 only (platform `emery`, 200x228 screen). Built and 
 | Time | Large 7-segment digits. A **P** lights up for PM in 12-hour mode. During Quiet Time the colon is a line |
 | Low / high | Today's low and high temperature side by side, each after a mark (tall arrows, triangles or LO / HI) with a divider between them |
 | Right box | The current temperature (°C or °F) |
-| Bottom bezel | A heart and your latest heart rate, the next sunrise or sunset (a half sun with an arrow up or down, and the time), and a text label |
+| Bottom bezel | A heart and your latest heart rate, the next sunrise or sunset (a half sun with an arrow up or down, and the time, a little smaller; it can be turned off), and a text label |
 
 Notes:
 

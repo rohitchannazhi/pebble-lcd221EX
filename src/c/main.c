@@ -1815,17 +1815,17 @@ static bool next_sun_event(time_t now, time_t *when, bool *rise) {
 
 // The next sunrise or sunset on the bottom bezel, centred between the heart rate (ending at
 // `left`) and the label (starting at `right`): a half sun with an arrow up or down, and the time
-// in the heart rate's font and colour. Left out if it doesn't fit.
-static void draw_sun_event(GContext *ctx, BezelGroup g, int left, int right) {
+// in the heart rate's colour, in the bezel font's smaller size. Left out if it doesn't fit.
+static void draw_sun_event(GContext *ctx, int left, int right) {
   static const char *const SUNRISE[] = {
-    "......#......", ".....###.....", "....#####....", "......#......", "......#......", ".............",
-    "...#######...", "..#########..", ".###########.", ".............", "#############",
+    ".....#.....", "....###....", "...#####...", ".....#.....", "...........", "...#####...",
+    ".#########.", "...........", "###########",
   };
   static const char *const SUNSET[] = {
-    "......#......", "......#......", "....#####....", ".....###.....", "......#......", ".............",
-    "...#######...", "..#########..", ".###########.", ".............", "#############",
+    ".....#.....", "...#####...", "....###....", ".....#.....", "...........", "...#####...",
+    ".#########.", "...........", "###########",
   };
-  enum { ICON_W = 13, GAP = 3, MARGIN = 6 };
+  enum { ICON_W = 11, GAP = 3, MARGIN = 6 };
   time_t when;
   bool rise;
   if (!next_sun_event(time(NULL), &when, &rise)) return;
@@ -1835,11 +1835,13 @@ static void draw_sun_event(GContext *ctx, BezelGroup g, int left, int right) {
   if (!is_24h()) hour = hour % 12 ? hour % 12 : 12;
   if (is_24h() && !s_settings.hour_no_zero) snprintf(text, sizeof(text), "%02d:%02d", hour, t->tm_min);
   else snprintf(text, sizeof(text), "%d:%02d", hour, t->tm_min);
-  const int tw = bezel_width(g, text, 60), w = ICON_W + GAP + tw;
+  const int tw = bezel_width(BG_SMALL, text, 60), w = ICON_W + GAP + tw;
   if (right - left - 2 * MARGIN < w) return;
   const int x = (left + right - w) / 2;
-  draw_icon(ctx, x, BOTTOM_CAP_Y + 1, rise ? SUNRISE : SUNSET, ARRAY_LENGTH(SUNRISE), s_col[COL_HEART]);
-  draw_bezel_text(ctx, BAR_BOTTOM, g, text, x + ICON_W + GAP, tw, GTextAlignmentLeft, s_col[COL_HEART]);
+  const int cap_y = PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - BEZEL_CAP[BG_SMALL]) / 2;  // as the text's
+  draw_icon(ctx, x, cap_y + (BEZEL_CAP[BG_SMALL] - (int)ARRAY_LENGTH(SUNRISE)) / 2, rise ? SUNRISE : SUNSET,
+            ARRAY_LENGTH(SUNRISE), s_col[COL_HEART]);
+  draw_bezel_text(ctx, BAR_BOTTOM, BG_SMALL, text, x + ICON_W + GAP, tw, GTextAlignmentLeft, s_col[COL_HEART]);
 }
 
 static void draw_bottom_bezel(GContext *ctx) {
@@ -1855,7 +1857,7 @@ static void draw_bottom_bezel(GContext *ctx) {
   const BezelGroup g = bezel_fits(BG_NORMAL, s_settings.bezel_label, 120) ? BG_NORMAL : BG_SMALL;
   draw_bezel_text(ctx, BAR_BOTTOM, g, hr_text, 30, 40, GTextAlignmentLeft, s_col[COL_HEART]);
   draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
-  if (s_settings.show_sun) draw_sun_event(ctx, g, 30 + bezel_width(g, hr_text, 40),
+  if (s_settings.show_sun) draw_sun_event(ctx, 30 + bezel_width(g, hr_text, 40),
                                           190 - bezel_width(g, s_settings.bezel_label, 120));
 }
 
