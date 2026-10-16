@@ -1,4 +1,4 @@
-# LCD 221
+# Casio mockup app
 
 A watch face for the **Pebble Time 2** that imitates the look of the Casio W-221H:
 a white LCD with 7-segment digits, a dot-matrix weekday and the indicators, between a
