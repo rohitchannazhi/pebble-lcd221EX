@@ -47,14 +47,15 @@ enum { FORMAT_AUTO = 0, FORMAT_24H = 1, FORMAT_12H = 2 };
 enum { UNIT_AUTO = 0, UNIT_C = 1, UNIT_F = 2 };
 
 // Digit styles: the 7-segment digits, or a font for every text and number on the LCD.
-// Digit styles (the values are saved). All but DIGITS_ICEBERG and DIGITS_BEBAS (pre-rendered fonts)
-// are drawn by the code: 7-segment digits whose segments are solid, dotted or hollow, in the
+// Digit styles (the values are saved). All but the pre-rendered fonts (DIGITS_ICEBERG, DIGITS_BEBAS,
+// DIGITS_QUANTICO, DIGITS_TEKO, DIGITS_ORBITRON, DIGITS_SQUADA) are drawn by the code: 7-segment digits whose segments are solid, dotted or hollow, in the
 // 7-Segment font's shapes or the Modern and Classic Bold ones (segments_dseg.h); or dot-matrix
 // digits like the weekday's letters (DIGITS_MATRIX_DOTTED: with the time in dotted segments).
 // See use_digits().
 enum { DIGITS_SEGMENT = 0, DIGITS_DOTTED = 1, DIGITS_HOLLOW = 2, DIGITS_ICEBERG = 3, DIGITS_MODERN_LIGHT = 4,
        DIGITS_MATRIX = 5, DIGITS_MATRIX_DOTTED = 6, DIGITS_MODERN_BOLD = 7, DIGITS_CLASSIC_BOLD = 8,
-       DIGITS_BEBAS = 9, DIGITS_COUNT };
+       DIGITS_BEBAS = 9, DIGITS_QUANTICO = 10, DIGITS_TEKO = 11, DIGITS_ORBITRON = 12, DIGITS_SQUADA = 13,
+       DIGITS_COUNT };
 // Divider line styles.
 enum { LINES_SOLID = 0, LINES_SEGMENTED = 1, LINES_RULER = 2, LINES_BRACKETS = 3, LINES_HUD = 4, LINES_COUNT };
 
@@ -649,6 +650,10 @@ static void load_digit_font(void) {
   switch (s_settings.digit_style) {
     case DIGITS_ICEBERG: id = RESOURCE_ID_FONT_ICEBERG; break;
     case DIGITS_BEBAS: id = RESOURCE_ID_FONT_BEBAS; break;
+    case DIGITS_QUANTICO: id = RESOURCE_ID_FONT_QUANTICO; break;
+    case DIGITS_TEKO: id = RESOURCE_ID_FONT_TEKO; break;
+    case DIGITS_ORBITRON: id = RESOURCE_ID_FONT_ORBITRON; break;
+    case DIGITS_SQUADA: id = RESOURCE_ID_FONT_SQUADA; break;
     default: return;
   }
   s_font = load_font(id, FG_COUNT);
@@ -1995,6 +2000,10 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
     const int x = IND_X0 + SLOT[i][0], y = IND_Y0 + SLOT[i][1];
+    // A lit pill's label: the LCD's colour where that stands out from the pill (white in a black
+    // pill on a white LCD), otherwise black in a light pill and white in a dark one.
+    const GColor text = is_dark(ind[i].ink) != is_dark(s_lcd) ? s_lcd
+        : is_dark(ind[i].ink) ? GColorWhite : GColorBlack;
     draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + (ph - LABEL_H) / 2, pw - 4, LABEL_H), false);
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     for (int yy = y; yy < y + ph; yy++) {
@@ -2002,7 +2011,7 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
       for (int xx = x; xx < x + pw; xx++) {
         if (!in_round_rect(xx, yy, x, y, pw, ph, pr)) continue;
         if (ind[i].on) {  // fill, with the label cut out of it
-          row.data[xx] = row.data[xx] == ind[i].ink.argb ? s_lcd.argb : ind[i].ink.argb;
+          row.data[xx] = row.data[xx] == ind[i].ink.argb ? text.argb : ind[i].ink.argb;
         } else if (!in_round_rect(xx, yy, x + 1, y + 1, pw - 2, ph - 2, pr - 1) &&
                    BAYER4[yy & 3][xx & 3] < s_label_off_density) {  // the outline, in dots
           row.data[xx] = s_ghost.argb;
@@ -2361,6 +2370,7 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
       { "dotted", DIGITS_DOTTED }, { "hollow", DIGITS_HOLLOW }, { "iceberg", DIGITS_ICEBERG },
       { "light", DIGITS_MODERN_LIGHT }, { "bold", DIGITS_MODERN_BOLD }, { "matrix", DIGITS_MATRIX },
       { "matrixdot", DIGITS_MATRIX_DOTTED }, { "classicbold", DIGITS_CLASSIC_BOLD }, { "bebas", DIGITS_BEBAS },
+      { "quantico", DIGITS_QUANTICO }, { "teko", DIGITS_TEKO }, { "orbitron", DIGITS_ORBITRON }, { "squada", DIGITS_SQUADA },
     };
     uint8_t style = DIGITS_SEGMENT;
     for (unsigned i = 0; i < ARRAY_LENGTH(STYLES); i++) {

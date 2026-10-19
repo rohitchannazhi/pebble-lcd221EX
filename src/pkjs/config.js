@@ -157,7 +157,11 @@ module.exports = [
           { "label": "Dot matrix", "value": "matrix" },
           { "label": "Dot matrix, dotted clock", "value": "matrixdot" },
           { "label": "Angular (based on Iceberg)", "value": "iceberg" },
-          { "label": "Bebas Neue", "value": "bebas" }
+          { "label": "Bebas Neue", "value": "bebas" },
+          { "label": "Teko", "value": "teko" },
+          { "label": "Tactical (based on Quantico)", "value": "quantico" },
+          { "label": "Orbital (based on Orbitron)", "value": "orbitron" },
+          { "label": "Squared (based on Squada One)", "value": "squada" }
         ]
       },
       {

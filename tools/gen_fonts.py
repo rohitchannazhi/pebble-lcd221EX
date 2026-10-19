@@ -8,12 +8,13 @@ of the reference glyph ("8" for digits, "M" for letters) down to the baseline. A
 size is fixed by its widest possible text, so it never changes with the value shown.
 
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
-    iceberg/Iceberg-Regular.ttf; bebasneue/BebasNeue-Regular.ttf; sairaextracondensed/SairaExtraCondensed-Bold.ttf, which only lends
+    iceberg/Iceberg-Regular.ttf; bebasneue/BebasNeue-Regular.ttf; quantico/Quantico-Bold.ttf;
+    teko/Teko[wght].ttf; orbitron/Orbitron[wght].ttf; squadaone/SquadaOne-Regular.ttf; sairaextracondensed/SairaExtraCondensed-Bold.ttf, which only lends
     its degree mark (CHAR_FONT), and oxanium/Oxanium[wght].ttf, its letters (LABEL_FONT);
     chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text (bezel.bin, see BEZEL_GROUPS).
-Usage (needs Pillow; give all five, as they borrow from each other):
-    python3 tools/gen_fonts.py Iceberg-Regular.ttf BebasNeue-Regular.ttf SairaExtraCondensed-Bold.ttf \
-        Oxanium*.ttf ChakraPetch-SemiBold.ttf
+Usage (needs Pillow; give them all, as they borrow from each other):
+    python3 tools/gen_fonts.py Iceberg-Regular.ttf BebasNeue-Regular.ttf Quantico-Bold.ttf Teko*.ttf \
+        Orbitron*.ttf SquadaOne-Regular.ttf SairaExtraCondensed-Bold.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf
 
 File format (all offsets absolute, little-endian):
     "LF" 1 <groups>, then per group: H, count, table offset (2 bytes);
@@ -44,16 +45,20 @@ GROUPS = [
     ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 # Output name -> (the start of its file's name, its variable-font axis settings, or None).
-# The digit style fonts (Angular, Bebas Neue) are condensed: their digits fill the 7-segment
-# digits' cells without being squeezed or made smaller.
+# Most digit style fonts (Angular, Bebas Neue, Teko, Squada One, Quantico) are condensed enough
+# to fill the 7-segment digits' cells; Orbitron, a wide font, is narrowed, then made smaller.
 FONTS = {
     "saira": ("sairaextracondensed", None),    # only lends its degree mark, below
     "iceberg": ("iceberg", None),
     "bebas": ("bebasneue", None),
+    "quantico": ("quantico", None),
+    "teko": ("teko", {"Weight": 600}),
+    "orbitron": ("orbitron", {"Weight": 700}),
+    "squada": ("squadaone", None),
     "oxanium": ("oxanium", {"Weight": 700}),  # only lends its letters, below
     "chakrapetch": ("chakrapetch", None),      # the bezels' font
 }
-OUTPUT = ["iceberg", "bebas"]  # the digit style fonts, in RESOURCE_ID order (package.json)
+OUTPUT = ["iceberg", "bebas", "quantico", "teko", "orbitron", "squada"]  # the digit style fonts, in RESOURCE_ID order (package.json)
 # The small indicator labels: condensed letters are hard to read at 10 px, so they all come
 # from Oxanium.
 LABEL_FONT = {name: "oxanium" for name in OUTPUT}

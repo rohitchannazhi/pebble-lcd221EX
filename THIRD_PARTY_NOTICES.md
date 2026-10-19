@@ -28,7 +28,7 @@ Classic** (Bold) by **keshikan**,
   so they are offered as "Modern" and "Classic Bold" and not under the reserved name; they stay under the same
   licence and are not sold on their own.
 
-## Iceberg, Bebas Neue, Saira, Chakra Petch and Oxanium (pre-rendered fonts)
+## Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Saira, Chakra Petch and Oxanium (pre-rendered fonts)
 
 The "Digit style" font and the bezels' font are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
 `resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
@@ -39,12 +39,22 @@ The font files themselves are not included.
   under the reserved name. Its degree mark is Saira's.
 - **Bebas Neue**: Copyright (c) 2010 by Dharma Type (no Reserved Font Name). The "Bebas Neue" digit
   style (`bebas.bin`).
+- **Quantico** (Bold): Copyright (c) 2011 Matthew Desmond (http://www.madtype.com), with Reserved
+  Font Name "Quantico". The rendered version is a Modified Version, offered as "Tactical (based on
+  Quantico)" (`quantico.bin`).
+- **Teko** (SemiBold): Copyright 2023 The Teko Project Authors (https://www.github.com/googlefonts/teko)
+  (no Reserved Font Name). The "Teko" digit style (`teko.bin`).
+- **Orbitron** (Bold): Copyright 2018 The Orbitron Project Authors
+  (https://github.com/theleagueof/orbitron), with Reserved Font Name "Orbitron". Offered as
+  "Orbital (based on Orbitron)" (`orbitron.bin`).
+- **Squada One**: Copyright (c) 2011, Admix Designs (http://www.admixdesigns.com/), with Reserved
+  Font Name "Squada". Offered as "Squared (based on Squada One)" (`squada.bin`).
 - **Saira** (Saira Extra Condensed Bold): Copyright 2016 The Saira Project Authors
   (omnibus.type@gmail.com), with Reserved Font Name "Saira". Only Angular's degree mark.
 - **Chakra Petch** (SemiBold): Copyright 2018 The Chakra Petch Project Authors
   (https://github.com/m4rc1e/Chakra-Petch.git). The top and bottom bezels' text (`bezel.bin`).
 - **Oxanium**: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium).
-  Only Angular's and Bebas Neue's small indicator labels, which read better in its letters at that size.
+  Only the digit style fonts' small indicator labels, which read better in its letters at that size.
 - Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt));
   the rendered files stay under the same licence.
 
