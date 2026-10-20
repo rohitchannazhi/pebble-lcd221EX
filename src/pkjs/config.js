@@ -190,12 +190,17 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "pills",
-        "description": "How BT, CHG and DST are shown next to the weekday. During Quiet Time the colon of the time is a line.",
+        "description": "How BT, CHG, DST and the chance of rain are shown next to the weekday. During Quiet Time the colon of the time is a line.",
         "options": [
           { "label": "Pills", "value": "pills" },
           { "label": "Active only", "value": "active" },
           { "label": "Icons", "value": "icons" }
         ]
+      },
+      {
+        "type": "toggle", "messageKey": "ShowRain", "label": "Chance of rain",
+        "defaultValue": true,
+        "description": "The chance of rain in the next hour (e.g. 40%) as an indicator, lit from 50%. From the weather, for your location (the Icons style shows a raindrop)."
       },
       {
         "type": "toggle", "messageKey": "WeatherBox", "label": "Weather layout",
@@ -262,6 +267,7 @@ module.exports = [
       colorItem("ColBt", "BT", "000000"),
       colorItem("ColChg", "CHG / FULL", "000000"),
       colorItem("ColDst", "DST", "000000"),
+      colorItem("ColMute", "Chance of rain", "000000"),
       colorHeading("Time"),
       colorItem("ColHours", "Hour digits", "000000"),
       colorItem("ColColon", "Colon", "000000"),

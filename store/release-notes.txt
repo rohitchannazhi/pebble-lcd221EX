@@ -25,3 +25,4 @@ New: your phone's battery level in the middle of the top bezel (Android; can be 
 New: four more digit styles: Teko, Tactical (based on Quantico), Orbital (based on Orbitron) and Squared (based on Squada One).
 Fixed: a lit indicator pill in a light color has black text (it was the LCD's white).
 New: Night mode (optional): from sunset to sunrise, black on white with a red heart, a light blue BT and an amber DST.
+New: the chance of rain in the next hour as an indicator (e.g. 40%), lit from 50%; a raindrop in the Icons style.

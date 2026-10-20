@@ -47,6 +47,7 @@ function fetchWeather(minAgeMs) {
       '&longitude=' + pos.coords.longitude.toFixed(3) +
       '&current=temperature_2m,weather_code,is_day' +
       '&daily=temperature_2m_min,temperature_2m_max,sunrise,sunset' +
+      '&hourly=precipitation_probability&forecast_hours=2' +  // this hour and the next
       '&forecast_days=2&timezone=auto' +  // "today" is the local day where the phone is
       '&timeformat=unixtime';
     var xhr = new XMLHttpRequest();
@@ -63,6 +64,12 @@ function fetchWeather(minAgeMs) {
         if (typeof lo === 'number' && typeof hi === 'number') {
           msg.TempMin = Math.round(lo * 10);
           msg.TempMax = Math.round(hi * 10);
+        }
+        // The chance of rain in the next hour: the higher of this hour's and the next one's.
+        var rain = data.hourly && data.hourly.precipitation_probability;
+        if (rain && rain.length) {
+          var chance = Math.max.apply(null, rain.slice(0, 2).filter(function (v) { return typeof v === 'number'; }));
+          if (isFinite(chance)) msg.Rain = Math.round(chance);
         }
         if (typeof cur.weather_code === 'number') msg.Condition = condition(cur.weather_code, cur.is_day === 1);
         // (Near the poles a day may have no sunrise or sunset: that one is left out.)

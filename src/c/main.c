@@ -106,6 +106,7 @@ typedef struct {
   uint8_t show_sun;            // 1: the next sunrise or sunset on the bottom bezel
   uint8_t show_phone_battery;  // 1: the phone's battery level in the top bezel's middle
   uint8_t night_mode;          // 1: the night colours from sunset to sunrise (see apply_theme)
+  uint8_t show_rain;           // 1: the chance of rain (e.g. 40%) among the indicators
 } Settings;
 
 typedef struct {
@@ -116,6 +117,7 @@ typedef struct {
   // Added after that (older saves are shorter: these stay 0)
   uint8_t condition;           // WX_NONE or the picture for the current weather (the weather layout)
   time_t sun[4];               // today's sunrise and sunset, then tomorrow's (0: not known)
+  uint8_t rain;                // the chance of rain in the next hour (percent) + 1; 0: not known
 } Weather;
 
 // The weather layout's pictures (sent by the phone as "Condition", from Open-Meteo's weather code).
@@ -127,7 +129,7 @@ enum { WX_NONE = 0, WX_SUN, WX_MOON, WX_PARTLY, WX_PARTLY_NIGHT, WX_CLOUD, WX_RA
 typedef enum {
   COL_CASE, COL_TOP_LEFT, COL_TOP_RIGHT, COL_BADGE, COL_HEART, COL_LABEL,  // case and what is printed on it
   COL_EDGE, COL_LCD, COL_UNLIT,                                            // the LCD window
-  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row (COL_FRAME, COL_SIG: unused)
+  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row (COL_FRAME, COL_SIG: unused; COL_MUTE: the chance of rain)
   COL_HOURS, COL_COLON, COL_MINUTES, COL_PM,                               // the time
   COL_DST, COL_DATE, COL_RULES, COL_RIGHT,                                 // bottom row of the LCD
   COL_COUNT
@@ -1931,7 +1933,8 @@ static void draw_bottom_bezel(GContext *ctx) {
                                           190 - bezel_width(g, s_settings.bezel_label, 120));
 }
 
-#define INDICATORS 3  // BT, CHG (or PM) and DST
+#define INDICATORS 4  // BT, CHG (or PM), DST and the chance of rain
+#define RAIN_LIT 50   // the chance of rain (percent) from which its indicator is lit
 
 // One indicator: its label (NULL: not shown in this layout), whether it is on, and its colour when on.
 typedef struct {
@@ -1963,6 +1966,18 @@ static const char *tiny_letter(char ch) {
     case 'S': return "####..###..####";
     case 'T': return "###.#..#..#..#.";
     case 'U': return "#.##.##.##.####";
+    case '0': return "####.##.##.####";
+    case '1': return ".#.##..#..#.###";
+    case '2': return "###..#####..###";
+    case '3': return "###..####..####";
+    case '4': return "#.##.####..#..#";
+    case '5': return "####..###..####";
+    case '6': return "####..####.####";
+    case '7': return "###..#..#..#..#";
+    case '8': return "####.#####.####";
+    case '9': return "####.####..####";
+    case '%': return "#.#..#.#.#..#.#";
+    case '-': return "......###......";
     default:  return NULL;
   }
 }
@@ -2027,15 +2042,18 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define BIG_PILL_H 18
 #define BIG_PILL_R 7
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // BT and DST on the right, CHG (or PM) on the left, level with the middle of the two. In the
-  // weather layout, BT above DST, centred in the box.
-  const bool big = s_settings.weather_box;
-  const int pw = big ? BIG_PILL_W : PILL_W, ph = big ? BIG_PILL_H : PILL_H, pr = big ? BIG_PILL_R : PILL_R;
-  const int bx = (IND_BOTTOM_W - BIG_PILL_W) / 2, by = (IND_BOTTOM_H - 2 * BIG_PILL_H - 4) / 2;
+  // BT and DST on the right, CHG (or PM) and the chance of rain on the left (CHG level with the
+  // middle of the two without it). In the weather layout, one column in the middle of the box: BT,
+  // DST and the chance of rain, as big as fits.
+  const bool wx = s_settings.weather_box, rain = ind[3].label != NULL;
+  const int pw = wx ? BIG_PILL_W : PILL_W, ph = wx ? (rain ? 14 : BIG_PILL_H) : PILL_H;
+  const int pr = wx ? (rain ? 6 : BIG_PILL_R) : PILL_R, gap = rain ? 2 : 4;
+  const int bx = (IND_BOTTOM_W - BIG_PILL_W) / 2, by = (IND_BOTTOM_H - (rain ? 3 : 2) * (ph + gap) + gap) / 2;
   const uint8_t SLOT[INDICATORS][2] = {
-    { big ? bx : 44, big ? by : 0 },                    // BT
-    { 1, 7 },                                           // CHG / PM (not in the weather layout)
-    { big ? bx : 44, big ? by + BIG_PILL_H + 4 : 15 },  // DST
+    { wx ? bx : 44, wx ? by : 0 },                          // BT
+    { 1, rain ? 0 : 7 },                                    // CHG / PM (not in the weather layout)
+    { wx ? bx : 44, wx ? by + ph + gap : 15 },              // DST
+    { wx ? bx : 1, wx ? by + 2 * (ph + gap) : 15 },         // the chance of rain
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
@@ -2082,8 +2100,8 @@ static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
   }
 }
 
-// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM), Quiet Time (the moon)
-// and daylight saving time (the sun). Faint dots when off.
+// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM), the chance of rain (a
+// raindrop, lit from RAIN_LIT) and daylight saving time (the sun). Faint dots when off.
 static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density) {
   for (int r = 0; r < 2 * n; r++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y + r);
@@ -2101,17 +2119,22 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
   static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
   static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
                                      "..#####..", "...###...", ".#.....#.", "....#...." };
-  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown).
-  const bool wx = s_settings.weather_box;
+  static const char *const DROP[] = { "...#...", "..###..", ".#####.", ".#####.", "#######", "#######", "#######",
+                                      ".#####.", "..###.." };
+  // In the weather layout BT, the raindrop and the sun side by side in the bottom box (above PM, if shown).
+  const bool wx = s_settings.weather_box, rain = ind[3].label != NULL;
   const int top = wx ? IND_Y0 + (pm_cell ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
   struct { const char *const *rows; int n; int x; int ind; } icon[] = {
-    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : 10), 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 36, 1 },
-    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : 60), 2 },
+    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? (rain ? 8 : 16) : rain ? 3 : 10), 0 },
+    { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + (rain ? 21 : 36), 1 },
+    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? (rain ? 48 : 38) : rain ? 63 : 60), 2 },
+    { DROP, ARRAY_LENGTH(DROP), IND_X0 + (wx ? 26 : 41), 3 },
   };
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
     const Indicator *it = &ind[icon[k].ind];
     if (k == 1 && (pm_cell || wx)) continue;  // PM is a label, drawn below; no CHG in the weather layout
+    if (k == 3 && !rain) continue;
     if (!it->on && !s_settings.ghosts) continue;
     draw_icon_2x(icon[k].x, top + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
                  it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
@@ -2131,7 +2154,12 @@ static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   const bool pm_cell = !is_24h() && s_settings.pm_in_box && !s_settings.weather_box;  // (weather: the P)
-  // In the order BT, CHG (or PM), DST. (Quiet Time is shown by the colon: a line.)
+  // The chance of rain in the next hour (while the weather is recent), lit from RAIN_LIT.
+  static char rain_text[6];
+  const bool rain_known = s_weather.rain > 0 && weather_valid();
+  if (rain_known) snprintf(rain_text, sizeof(rain_text), "%d%%", s_weather.rain - 1);
+  else snprintf(rain_text, sizeof(rain_text), "--%%");
+  // In the order BT, CHG (or PM), DST, the chance of rain. (Quiet Time is shown by the colon: a line.)
   const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
     // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
@@ -2139,6 +2167,7 @@ static void draw_indicators(GContext *ctx) {
     { pm_cell ? "PM" : s_settings.weather_box ? NULL : full ? "FULL" : "CHG",
       pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full, pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
     { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
+    { s_settings.show_rain ? rain_text : NULL, rain_known && s_weather.rain - 1 >= RAIN_LIT, s_col[COL_MUTE] },
   };
   switch (s_settings.indicator_style) {
     case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
@@ -2333,6 +2362,12 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
       changed |= (time_t)tuple_int(t) != s_weather.sun[i];
       s_weather.sun[i] = (time_t)tuple_int(t);
     }
+    if ((t = dict_find(iter, MESSAGE_KEY_Rain))) {  // the chance of rain in the next hour, percent
+      const int v = tuple_int(t);
+      const uint8_t rain = v >= 0 && v <= 100 ? v + 1 : 0;
+      changed |= rain != s_weather.rain;
+      s_weather.rain = rain;
+    }
     s_weather.temp = temp;
     s_weather.temp_min = temp_min;
     s_weather.temp_max = temp_max;
@@ -2455,6 +2490,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_phone_battery = v >= 0 && v <= 100 ? v : -1;
     if (s_canvas) layer_mark_dirty(s_canvas);
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_ShowRain))) {
+    s_settings.show_rain = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_NightMode))) {
     s_settings.night_mode = tuple_int(t) ? 1 : 0;
     settings_changed = true;
@@ -2550,6 +2589,7 @@ static void init(void) {
     .vibe_connect = VIBE_SHORT,
     .show_sun = 1,
     .show_phone_battery = 1,
+    .show_rain = 1,
   };
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
@@ -2570,11 +2610,13 @@ static void init(void) {
   if (s_settings.show_sun > 1) s_settings.show_sun = 1;
   if (s_settings.show_phone_battery > 1) s_settings.show_phone_battery = 1;
   if (s_settings.night_mode > 1) s_settings.night_mode = 0;
+  if (s_settings.show_rain > 1) s_settings.show_rain = 1;
   load_digit_font();
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
   if (s_weather.has_range > 1) s_weather.has_range = 0;
   if (s_weather.condition >= WX_COUNT) s_weather.condition = WX_NONE;
+  if (s_weather.rain > 101) s_weather.rain = 0;
   s_colors.enabled = 0;
   memcpy(s_colors.argb, COLOR_DEFAULTS, sizeof(s_colors.argb));
   // (Only data of the colours' own size: the key once held Settings by mistake.)

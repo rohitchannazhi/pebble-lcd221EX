@@ -42,7 +42,8 @@ GROUPS = [
     ("range", DIGITS + "-", "8", 30, [("88", 34)]),  # (100 and up, or below zero, runs further left)
     # (Below zero or from 100 up, the watch leaves out the degree mark to keep this size.)
     ("right", DIGITS + "-°", "8", 36, [("88°", 66), ("-88", 66), ("188", 66)]),
-    ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
+    # (With the digits and % for the chance of rain, e.g. 40%; sized by the letters, as before.)
+    ("label", "BCDEFGHILMOPSTU0123456789%-", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 # Output name -> (the start of its file's name, its variable-font axis settings, or None).
 # Most digit style fonts (Angular, Bebas Neue, Teko, Squada One, Quantico) are condensed enough

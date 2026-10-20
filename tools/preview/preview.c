@@ -321,7 +321,11 @@ __attribute__((export_name("preview_init"))) void preview_init(void) {
                          .condition = WX_PARTLY,
                          .sun = { midnight + 25080, midnight + 67320, midnight + 86400 + 25020, midnight + 86400 + 67380 } };
   s_phone_battery = 64;
+  s_weather.rain = 41;  // 40%
 }
+
+// Another chance of rain (percent; -1: not known), after preview_init().
+__attribute__((export_name("preview_rain"))) void preview_rain(int percent) { s_weather.rain = percent + 1; }
 
 // Quiet Time on or off (for screenshots and tests).
 __attribute__((export_name("preview_quiet"))) void preview_quiet(int on) { s_sample_quiet = on; }
