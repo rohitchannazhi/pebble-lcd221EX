@@ -313,7 +313,7 @@ __attribute__((export_name("preview_sample"))) void preview_sample(int battery, 
 
 // Starts the face as on the watch with nothing saved, with a sample temperature and range, a
 // partly cloudy sky, today's and tomorrow's sunrise (6:58) and sunset (18:42), and the phone's
-// battery at 64%.
+// battery at 64%, and a 60% chance of rain.
 __attribute__((export_name("preview_init"))) void preview_init(void) {
   init();
   const time_t midnight = time_start_of_today();
@@ -321,7 +321,7 @@ __attribute__((export_name("preview_init"))) void preview_init(void) {
                          .condition = WX_PARTLY,
                          .sun = { midnight + 25080, midnight + 67320, midnight + 86400 + 25020, midnight + 86400 + 67380 } };
   s_phone_battery = 64;
-  s_weather.rain = 41;  // 40%
+  s_weather.rain = 61;  // 60%: lit, so it shows in every indicator style
 }
 
 // Another chance of rain (percent; -1: not known), after preview_init().

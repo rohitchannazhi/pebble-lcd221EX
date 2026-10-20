@@ -800,6 +800,8 @@ static void update_steps(void) {
 
 // True for colours a "light on dark" treatment suits (the ghosts are fainter on those).
 static bool is_dark(GColor c) { return 299 * c.r + 587 * c.g + 114 * c.b < 1500; }
+// Darker than dark gray: a lit pill's label is white on it (black on anything lighter).
+static bool pill_is_dark(GColor c) { return 299 * c.r + 587 * c.g + 114 * c.b < 1000; }
 
 // Whether the sun is down at `now` (*night), from the last sunrise or sunset before it among the
 // ones the phone sent (each moved back a day at a time until it is before `now`, as they move only
@@ -2099,10 +2101,9 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
     const int x = IND_X0 + SLOT[i][0], y = IND_Y0 + SLOT[i][1];
-    // A lit pill's label: the LCD's colour where that stands out from the pill (white in a black
-    // pill on a white LCD), otherwise black in a light pill and white in a dark one.
-    const GColor text = is_dark(ind[i].ink) != is_dark(s_lcd) ? s_lcd
-        : is_dark(ind[i].ink) ? GColorWhite : GColorBlack;
+    // A lit pill's label: black, except in a pill darker than dark gray (black, navy, dark red...):
+    // there the LCD's colour, or white on a dark LCD.
+    const GColor text = pill_is_dark(ind[i].ink) ? (pill_is_dark(s_lcd) ? GColorWhite : s_lcd) : GColorBlack;
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     for (int yy = y; yy < y + ph; yy++) {
       GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
