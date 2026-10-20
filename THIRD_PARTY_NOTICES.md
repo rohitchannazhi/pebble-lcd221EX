@@ -28,7 +28,7 @@ Classic** (Bold) by **keshikan**,
   so they are offered as "Modern" and "Classic Bold" and not under the reserved name; they stay under the same
   licence and are not sold on their own.
 
-## Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Saira, Chakra Petch and Oxanium (pre-rendered fonts)
+## Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Saira, Chakra Petch, Barlow and Oxanium (pre-rendered fonts)
 
 The "Digit style" font and the bezels' font are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
 `resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
@@ -53,6 +53,9 @@ The font files themselves are not included.
   (omnibus.type@gmail.com), with Reserved Font Name "Saira". Only Angular's degree mark.
 - **Chakra Petch** (SemiBold): Copyright 2018 The Chakra Petch Project Authors
   (https://github.com/m4rc1e/Chakra-Petch.git). The top and bottom bezels' text (`bezel.bin`).
+- **Barlow** (Semi Condensed Bold): Copyright 2017 The Barlow Project Authors
+  (https://github.com/jpt/barlow) (no Reserved Font Name). The indicator labels of the styles without
+  a font of their own (`bezel.bin`'s label size).
 - **Oxanium**: Copyright 2019 The Oxanium Project Authors (https://github.com/sevmeyer/oxanium).
   Only the digit style fonts' small indicator labels, which read better in its letters at that size.
 - Licence: **SIL Open Font License 1.1** (full text in [`LICENSES/OFL-1.1.txt`](LICENSES/OFL-1.1.txt));

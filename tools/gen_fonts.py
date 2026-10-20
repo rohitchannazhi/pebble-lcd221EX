@@ -11,10 +11,12 @@ Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main
     iceberg/Iceberg-Regular.ttf; bebasneue/BebasNeue-Regular.ttf; quantico/Quantico-Bold.ttf;
     teko/Teko[wght].ttf; orbitron/Orbitron[wght].ttf; squadaone/SquadaOne-Regular.ttf; sairaextracondensed/SairaExtraCondensed-Bold.ttf, which only lends
     its degree mark (CHAR_FONT), and oxanium/Oxanium[wght].ttf, its letters (LABEL_FONT);
-    chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text (bezel.bin, see BEZEL_GROUPS).
+    chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text and barlowsemicondensed/
+    BarlowSemiCondensed-Bold.ttf for the indicator labels (bezel.bin, see BEZEL_GROUPS).
 Usage (needs Pillow; give them all, as they borrow from each other):
     python3 tools/gen_fonts.py Iceberg-Regular.ttf BebasNeue-Regular.ttf Quantico-Bold.ttf Teko*.ttf \
-        Orbitron*.ttf SquadaOne-Regular.ttf SairaExtraCondensed-Bold.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf
+        Orbitron*.ttf SquadaOne-Regular.ttf SairaExtraCondensed-Bold.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf \
+        BarlowSemiCondensed-Bold.ttf
 
 File format (all offsets absolute, little-endian):
     "LF" 1 <groups>, then per group: H, count, table offset (2 bytes);
@@ -58,6 +60,7 @@ FONTS = {
     "squada": ("squadaone", None),
     "oxanium": ("oxanium", {"Weight": 700}),  # only lends its letters, below
     "chakrapetch": ("chakrapetch", None),      # the bezels' font
+    "barlow": ("barlowsemicondensed", None),    # the indicator labels' (BEZEL_GROUPS)
 }
 OUTPUT = ["iceberg", "bebas", "quantico", "teko", "orbitron", "squada"]  # the digit style fonts, in RESOURCE_ID order (package.json)
 # The small indicator labels: condensed letters are hard to read at 10 px, so they all come
@@ -66,15 +69,17 @@ LABEL_FONT = {name: "oxanium" for name in OUTPUT}
 # Characters taken from another font: Iceberg's degree mark sits above its digits, where the
 # glyphs are cut off.
 CHAR_FONT = {"iceberg": {"\u00b0": "saira"}}
-# bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 (and 11, 9) px tall,
+# bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 (and 11, 9, 10) px tall,
 # with every character an upper-cased custom text may use (anything else falls back to the
 # system font). Its glyphs also reach below the baseline (commas, brackets).
 BEZEL_FONT = "chakrapetch"
 BEZEL_CHARS = "".join(chr(c) for c in range(0x20, 0x60))
 # (The second size is for texts too long for 13 px; the third, digits only, for the phone's
-# battery level in the top bezel's middle.)
+# battery level in the top bezel's middle; the fourth for the indicator labels of the styles
+# without a font of their own, e.g. BT, CHG, 40%.)
+# (A group may name its own font: the labels are a condensed one, to fit the small pills.)
 BEZEL_GROUPS = [("normal", BEZEL_CHARS, "H", 13), ("small", BEZEL_CHARS, "H", 11),
-                ("tiny", "0123456789", "H", 9)]
+                ("tiny", "0123456789", "H", 9), ("label", "BCDFGHLMPSTU0123456789%-", "H", 10, "barlow")]
 
 
 def load(path, size, axes):
@@ -156,9 +161,10 @@ def build(name, paths):
 
 
 def build_bezel(paths):
-    groups = [render_group(paths[BEZEL_FONT], FONTS[BEZEL_FONT][1], chars, ref, height,
-                           [("H", 1000)], below=True)
-              for _, chars, ref, height in BEZEL_GROUPS]
+    groups = []
+    for _, chars, ref, height, *font in BEZEL_GROUPS:
+        name = font[0] if font else BEZEL_FONT
+        groups.append(render_group(paths[name], FONTS[name][1], chars, ref, height, [("H", 1000)], below=True))
     return pack(groups), [(name, h) for (name, *_), (h, _) in zip(BEZEL_GROUPS, groups)]
 
 

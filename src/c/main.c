@@ -685,9 +685,12 @@ static void blit_glyph(const uint8_t *f, int g, const uint8_t *e, int x, int y, 
   }
 }
 
+// What the fonts' edges are mixed with: the LCD, or a lit pill's colour while its label is drawn.
+static GColor s_text_bg;
+
 // A digit-style glyph on the LCD.
 static void draw_glyph(FontGroup g, const uint8_t *e, int x, int y, GColor ink, int density) {
-  blit_glyph(s_font, g, e, x, y, ink, s_lcd, density);
+  blit_glyph(s_font, g, e, x, y, ink, s_text_bg.argb ? s_text_bg : s_lcd, density);
 }
 
 // The width of a text (the sum of its advances); a space is as wide as a '0' (a blank digit).
@@ -726,8 +729,9 @@ static void font_draw_centered(FontGroup g, char ch, int cx, int baseline, GColo
 // character an upper-cased custom text may use, with capitals 13 px tall, and 11 px for texts
 // too long for 13. A glyph's bitmap starts at the top of the capitals and reaches below the
 // baseline. A text with any other character (an emoji, an accent) uses the system font.
-typedef enum { BG_NORMAL, BG_SMALL, BG_TINY, BG_COUNT } BezelGroup;  // (BG_TINY: digits only)
-static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 11, 9 };
+// (BG_TINY: digits only; BG_LABEL: the indicator labels' characters.)
+typedef enum { BG_NORMAL, BG_SMALL, BG_TINY, BG_LABEL, BG_COUNT } BezelGroup;
+static const uint8_t BEZEL_CAP[BG_COUNT] = { 13, 11, 9, 10 };
 static uint8_t *s_bezel_font;  // NULL if it couldn't be loaded: the system font is used instead
 
 static bool bezel_font_has(BezelGroup g, const char *text) {
@@ -745,12 +749,16 @@ static int bezel_text_width(BezelGroup g, const char *text) {
 }
 
 // Draws a text with the top of its capitals at `cap_top`, on the case colour.
-static void bezel_draw_text(BezelGroup g, const char *text, int x, int cap_top, GColor ink) {
+static void bezel_draw_text_on(BezelGroup g, const char *text, int x, int cap_top, GColor ink, GColor bg,
+                               int density) {
   for (const char *p = text; *p; p++) {
     const uint8_t *e = find_glyph(s_bezel_font, g, *p);
-    blit_glyph(s_bezel_font, g, e, x + (int8_t)e[3], cap_top, ink, s_col[COL_CASE], DENSITY_FULL);
+    blit_glyph(s_bezel_font, g, e, x + (int8_t)e[3], cap_top, ink, bg, density);
     x += e[2];
   }
+}
+static void bezel_draw_text(BezelGroup g, const char *text, int x, int cap_top, GColor ink) {
+  bezel_draw_text_on(g, text, x, cap_top, ink, s_col[COL_CASE], DENSITY_FULL);
 }
 
 // ---------------------------------------------------------------------------
@@ -1999,28 +2007,44 @@ static void draw_tiny_label(const char *text, GRect cell, int align, GColor colo
   }
 }
 
-// An indicator's label in `cell` (`align`: ALIGN_LEFT, ...): lit, or faint dots when off. The
-// system font fitted to the cell, or the digit style's font.
-static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, int align) {
-  const GColor color = ind->on ? ind->ink : s_ghost;
-  const int density = ind->on ? DENSITY_FULL : s_label_off_density;
-  if (s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED) {
-    if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
-    draw_tiny_label(ind->label, cell, align, color, density);
-    graphics_release_frame_buffer(ctx, s_fb);
-    s_fb = NULL;
-    return;
-  }
-  if (!font_active()) {
-    draw_fitted_text(ctx, ind->label, cell, LABEL_H, color, density, align);
+// Whether an indicator label is drawn in the bezel font's label size: in the styles without a
+// font of their own (not the dot matrix), if it has the characters and fits `w`.
+static bool bezel_label(const char *label, int w) {
+  return !font_active() && s_settings.digit_style != DIGITS_MATRIX && s_settings.digit_style != DIGITS_MATRIX_DOTTED &&
+         bezel_font_has(BG_LABEL, label) && bezel_text_width(BG_LABEL, label) <= w;
+}
+
+// An indicator label in `cell` (`align`: ALIGN_LEFT, ...) in `color` on `bg` (what the letters'
+// edges blend into), dotted below DENSITY_FULL: the dot matrix's tiny letters, the digit style's
+// font, or the bezel font's crisp 10 px capitals (the system font fitted to the cell if not).
+static void draw_label(GContext *ctx, const char *label, GRect cell, int align, GColor color, GColor bg,
+                       int density) {
+  const bool matrix = s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED;
+  if (!matrix && !font_active() && !bezel_label(label, cell.size.w)) {
+    draw_fitted_text(ctx, label, cell, LABEL_H, color, density, align);
     return;
   }
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
-  font_draw_text(FG_LABEL, ind->label, cell.origin.x, cell.size.w,
-                 cell.origin.y + (cell.size.h + font_height(FG_LABEL)) / 2, align,
-                 color, density);
+  if (matrix) {
+    draw_tiny_label(label, cell, align, color, density);
+  } else if (font_active()) {
+    s_text_bg = bg;
+    font_draw_text(FG_LABEL, label, cell.origin.x, cell.size.w,
+                   cell.origin.y + (cell.size.h + font_height(FG_LABEL)) / 2, align, color, density);
+    s_text_bg = (GColor){ .argb = 0 };
+  } else {
+    const int tw = bezel_text_width(BG_LABEL, label);
+    const int x = cell.origin.x + (align == ALIGN_RIGHT ? cell.size.w - tw : align == ALIGN_LEFT ? 0 : (cell.size.w - tw) / 2);
+    bezel_draw_text_on(BG_LABEL, label, x, cell.origin.y + (cell.size.h - BEZEL_CAP[BG_LABEL]) / 2, color, bg, density);
+  }
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
+}
+
+// An indicator's label in `cell`: lit, or faint dots when off.
+static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, int align) {
+  draw_label(ctx, ind->label, cell, align, ind->on ? ind->ink : s_ghost, s_lcd,
+             ind->on ? DENSITY_FULL : s_label_off_density);
 }
 
 // The width of an indicator label as draw_indicator_label draws it.
@@ -2029,6 +2053,7 @@ static int indicator_label_width(const char *label) {
     return 8 * (int)strlen(label) - 2;
   }
   if (font_active()) return font_text_width(FG_LABEL, label);
+  if (bezel_label(label, FIT_MAX_W)) return bezel_text_width(BG_LABEL, label);
   return graphics_text_layout_get_content_size(label, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                                                GRect(0, 0, FIT_MAX_W, 30), GTextOverflowModeTrailingEllipsis,
                                                GTextAlignmentLeft).w;
@@ -2078,14 +2103,13 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
     // pill on a white LCD), otherwise black in a light pill and white in a dark one.
     const GColor text = is_dark(ind[i].ink) != is_dark(s_lcd) ? s_lcd
         : is_dark(ind[i].ink) ? GColorWhite : GColorBlack;
-    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + (ph - LABEL_H) / 2, pw - 4, LABEL_H), ALIGN_CENTER);
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     for (int yy = y; yy < y + ph; yy++) {
       GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
       for (int xx = x; xx < x + pw; xx++) {
         if (!in_round_rect(xx, yy, x, y, pw, ph, pr)) continue;
-        if (ind[i].on) {  // fill, with the label cut out of it
-          row.data[xx] = row.data[xx] == ind[i].ink.argb ? text.argb : ind[i].ink.argb;
+        if (ind[i].on) {  // filled; the label goes on top
+          row.data[xx] = ind[i].ink.argb;
         } else if (!in_round_rect(xx, yy, x + 1, y + 1, pw - 2, ph - 2, pr - 1) &&
                    BAYER4[yy & 3][xx & 3] < s_label_off_density) {  // the outline, in dots
           row.data[xx] = s_ghost.argb;
@@ -2094,6 +2118,9 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
     }
     graphics_release_frame_buffer(ctx, s_fb);
     s_fb = NULL;
+    const GRect cell = GRect(x + 1, y + (ph - LABEL_H) / 2, pw - 2, LABEL_H);
+    if (ind[i].on) draw_label(ctx, ind[i].label, cell, ALIGN_CENTER, text, ind[i].ink, DENSITY_FULL);
+    else draw_indicator_label(ctx, &ind[i], cell, ALIGN_CENTER);
   }
 }
 

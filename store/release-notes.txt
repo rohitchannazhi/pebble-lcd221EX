@@ -26,3 +26,4 @@ New: four more digit styles: Teko, Tactical (based on Quantico), Orbital (based 
 Fixed: a lit indicator pill in a light color has black text (it was the LCD's white).
 New: Night mode (optional): from sunset to sunrise, black on white with a red heart, a light blue BT and an amber DST.
 New: the chance of rain in the next hour as an indicator (e.g. 40%), lit from 50%; a raindrop in the Icons style.
+Changed: clearer indicator labels (Barlow Semi Condensed in the segment styles, and no gray fringes inside lit pills).
