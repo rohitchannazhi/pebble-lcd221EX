@@ -2049,12 +2049,12 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_W 41
 #define PILL_H 13
 #define PILL_R 5
-// The weather layout's pills, in the bottom box: smaller, squarer and further apart.
+// The weather layout's pills, in the bottom box: smaller and squarer, close together in its middle.
 #define SMALL_PILL_W 32
-#define SMALL_PILL_H 14
-#define SMALL_PILL_R 3
-#define SMALL_PILL_GAP_X 6
-#define SMALL_PILL_GAP_Y 8
+#define SMALL_PILL_H 18
+#define SMALL_PILL_R 4
+#define SMALL_PILL_GAP_X 4
+#define SMALL_PILL_GAP_Y 2
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   // BT and DST on the right, CHG (or PM) and the chance of rain on the left (CHG level with the
   // middle of the two without it). The weather layout's bottom box has the same 2x2 grid, in
