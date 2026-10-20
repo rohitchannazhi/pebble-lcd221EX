@@ -2023,6 +2023,17 @@ static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell
   s_fb = NULL;
 }
 
+// The width of an indicator label as draw_indicator_label draws it.
+static int indicator_label_width(const char *label) {
+  if (s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED) {
+    return 8 * (int)strlen(label) - 2;
+  }
+  if (font_active()) return font_text_width(FG_LABEL, label);
+  return graphics_text_layout_get_content_size(label, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                                               GRect(0, 0, FIT_MAX_W, 30), GTextOverflowModeTrailingEllipsis,
+                                               GTextAlignmentLeft).w;
+}
+
 // Whether (px, py) is inside the rounded rectangle x, y, w, h with corner radius r.
 static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
   if (px < x || py < y || px >= x + w || py >= y + h) return false;
@@ -2087,17 +2098,27 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
 }
 
 // Active only: the labels of the indicators that are on, right-aligned, two to a column (the
-// right column first); in the weather layout, left-justified, two to a row. Nothing is shown for
+// right column first); in the weather layout, right-justified, two to a row, the block centred in
+// the box. Nothing is shown for
 // the others.
 static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
-  int n = 0, count = 0;
-  for (int i = 0; i < INDICATORS; i++) count += ind[i].label && ind[i].on;
+  int n = 0, count = 0, w = 0;  // w: the widest lit label
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || !ind[i].on) continue;
-    if (s_settings.weather_box) {  // two to a row, left-justified, on up to two rows
-      const int rows = (count + 1) / 2, col = n % 2, row = n / 2;
+    count++;
+    const int lw = indicator_label_width(ind[i].label);
+    if (lw > w) w = lw;
+  }
+  if (w > 32) w = 32;
+  // The weather layout's two columns, each as wide as the widest label, centred in the box.
+  const int gap = 6, x0 = IND_X0 + (IND_BOTTOM_W - (count > 1 ? 2 * w + gap : w)) / 2;
+  for (int i = 0; i < INDICATORS; i++) {
+    if (!ind[i].label || !ind[i].on) continue;
+    if (s_settings.weather_box) {  // two to a row, right-justified (a row's only one on the right)
+      const int rows = (count + 1) / 2, row = n / 2;
+      const int col = count == 1 ? 0 : count - 2 * row >= 2 ? n % 2 : 1;
       const int y = IND_Y0 + (IND_BOTTOM_H - (16 * rows - 4)) / 2 + 16 * row;
-      draw_indicator_label(ctx, &ind[i], GRect(IND_X0 + 4 + 34 * col, y, 32, 12), ALIGN_LEFT);
+      draw_indicator_label(ctx, &ind[i], GRect(x0 + (w + gap) * col, y, w, 12), ALIGN_RIGHT);
       n++;
       continue;
     }
