@@ -107,6 +107,7 @@ typedef struct {
   uint8_t show_phone_battery;  // 1: the phone's battery level in the top bezel's middle
   uint8_t night_mode;          // 1: the night colours from sunset to sunrise (see apply_theme)
   uint8_t show_rain;           // 1: the chance of rain (e.g. 40%) among the indicators
+  uint8_t night_digits;        // night mode's digit style + 1, or 0: the day's (see digit_style)
 } Settings;
 
 typedef struct {
@@ -183,6 +184,18 @@ static ColorSettings s_colors;
 static Weather s_weather;
 static time_t s_weather_saved;       // when s_weather was last written to persistent storage
 static bool s_quiet;                 // Quiet Time, read once per redraw
+static bool s_night;                 // night mode's colours (and digits) are on: see apply_theme
+
+// The digit style to draw: the chosen one, or at night (night mode) the Night digit style; with
+// that left as the day's, the dotted ones (too faint in the night colours) become the 7-segment
+// digits. (The settings themselves stay: the day's style is back at sunrise.)
+static bool dotted_style(int st) { return st == DIGITS_DOTTED || st == DIGITS_MATRIX || st == DIGITS_MATRIX_DOTTED; }
+static int digit_style(void) {
+  const int st = s_settings.digit_style;
+  if (!s_night) return st;
+  if (s_settings.night_digits) return s_settings.night_digits - 1;
+  return dotted_style(st) ? DIGITS_SEGMENT : st;
+}
 static struct tm s_now;
 static BatteryChargeState s_battery;
 static bool s_connected;
@@ -539,18 +552,18 @@ typedef enum { AREA_TIME, AREA_DAY, AREA_OTHER } DigitArea;
 // The "Modern row": the weekday in 14-segment letters and the day of the month in Modern digits
 // (Hollow segments uses Modern Bold's).
 static bool modern_row(void) {
-  const int st = s_settings.digit_style;
+  const int st = digit_style();
   return st == DIGITS_MODERN_LIGHT || st == DIGITS_MODERN_BOLD || st == DIGITS_HOLLOW;
 }
 // Dot-matrix weekday letters and day of the month (5x5).
 static bool matrix_row(void) {
-  const int st = s_settings.digit_style;
+  const int st = digit_style();
   return st == DIGITS_MATRIX || st == DIGITS_MATRIX_DOTTED || st == DIGITS_DOTTED;
 }
 
 // Sets what draw_digit draws in an area, by digit style.
 static void use_digits(DigitArea area) {
-  const int st = s_settings.digit_style;
+  const int st = digit_style();
   s_matrix = st == DIGITS_MATRIX || (st == DIGITS_MATRIX_DOTTED && area != AREA_TIME);
   s_shapes = st == DIGITS_MODERN_LIGHT ? &SHAPES_LIGHT
       : (st == DIGITS_MODERN_BOLD || (st == DIGITS_HOLLOW && area == AREA_DAY)) ? &SHAPES_BOLD : &SHAPES_CLASSIC;
@@ -562,7 +575,7 @@ static void use_digits(DigitArea area) {
 
 // 14-segment capitals (the Modern row's weekday), each `w` x `h`, `pitch` px apart; no ghosts.
 static void draw_seg14_text(int x, int y, int w, int h, int pitch, const char *text, GColor ink) {
-  const bool light = s_settings.digit_style == DIGITS_MODERN_LIGHT;
+  const bool light = digit_style() == DIGITS_MODERN_LIGHT;
   const int16_t *const *polys = light ? SEG14_MODERN_LIGHT : SEG14_MODERN_BOLD;
   const uint8_t *lens = light ? SEG14_MODERN_LIGHT_LEN : SEG14_MODERN_BOLD_LEN;
   const uint16_t *letters = light ? SEG14_MODERN_LIGHT_LETTERS : SEG14_MODERN_BOLD_LETTERS;
@@ -644,13 +657,15 @@ static uint8_t *load_font(uint32_t id, int groups) {
 
 // Loads the font of the chosen digit style (only that one is in memory), or none for the
 // 7-segment digits. If it can't be loaded, the face falls back to the 7-segment digits.
+static int s_font_style = -1;  // the digit style s_font was loaded for
 static void load_digit_font(void) {
   if (s_font) {
     free(s_font);
     s_font = NULL;
   }
+  s_font_style = digit_style();
   uint32_t id;
-  switch (s_settings.digit_style) {
+  switch (s_font_style) {
     case DIGITS_ICEBERG: id = RESOURCE_ID_FONT_ICEBERG; break;
     case DIGITS_BEBAS: id = RESOURCE_ID_FONT_BEBAS; break;
     case DIGITS_QUANTICO: id = RESOURCE_ID_FONT_QUANTICO; break;
@@ -821,7 +836,6 @@ static bool sun_is_down(time_t now, bool *night) {
 }
 
 // Night mode: on (and the sunrise and sunset known) from sunset to sunrise.
-static bool s_night;
 static bool night_now(void) {
   bool night = false;
   return s_settings.night_mode && sun_is_down(time(NULL), &night) && night;
@@ -843,6 +857,8 @@ static void use_night_colors(void) {
 static void apply_theme(void) {
   bool inv = s_settings.inverted;
   s_night = night_now();
+  // The digit style's font (night mode may draw another style): loaded when the style changes.
+  if (digit_style() != s_font_style) load_digit_font();
 
   // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
   // black, silver or a colour of its own either way (Case color).
@@ -2012,7 +2028,7 @@ static void draw_tiny_label(const char *text, GRect cell, int align, GColor colo
 // Whether an indicator label is drawn in the bezel font's label size: in the styles without a
 // font of their own (not the dot matrix), if it has the characters and fits `w`.
 static bool bezel_label(const char *label, int w) {
-  return !font_active() && s_settings.digit_style != DIGITS_MATRIX && s_settings.digit_style != DIGITS_MATRIX_DOTTED &&
+  return !font_active() && digit_style() != DIGITS_MATRIX && digit_style() != DIGITS_MATRIX_DOTTED &&
          bezel_font_has(BG_LABEL, label) && bezel_text_width(BG_LABEL, label) <= w;
 }
 
@@ -2021,7 +2037,7 @@ static bool bezel_label(const char *label, int w) {
 // font, or the bezel font's crisp 10 px capitals (the system font fitted to the cell if not).
 static void draw_label(GContext *ctx, const char *label, GRect cell, int align, GColor color, GColor bg,
                        int density) {
-  const bool matrix = s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED;
+  const bool matrix = digit_style() == DIGITS_MATRIX || digit_style() == DIGITS_MATRIX_DOTTED;
   if (!matrix && !font_active() && !bezel_label(label, cell.size.w)) {
     draw_fitted_text(ctx, label, cell, LABEL_H, color, density, align);
     return;
@@ -2051,7 +2067,7 @@ static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell
 
 // The width of an indicator label as draw_indicator_label draws it.
 static int indicator_label_width(const char *label) {
-  if (s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED) {
+  if (digit_style() == DIGITS_MATRIX || digit_style() == DIGITS_MATRIX_DOTTED) {
     return 8 * (int)strlen(label) - 2;
   }
   if (font_active()) return font_text_width(FG_LABEL, label);
@@ -2386,6 +2402,20 @@ static int tuple_int(Tuple *t) {
   return (int)t->value->int32;
 }
 
+// A digit style by its name on the settings page ("segment", "dotted", ...).
+static uint8_t parse_digit_style(const char *name) {
+  static const struct { const char *name; uint8_t style; } STYLES[] = {
+    { "dotted", DIGITS_DOTTED }, { "hollow", DIGITS_HOLLOW }, { "iceberg", DIGITS_ICEBERG },
+    { "light", DIGITS_MODERN_LIGHT }, { "bold", DIGITS_MODERN_BOLD }, { "matrix", DIGITS_MATRIX },
+    { "matrixdot", DIGITS_MATRIX_DOTTED }, { "classicbold", DIGITS_CLASSIC_BOLD }, { "bebas", DIGITS_BEBAS },
+    { "quantico", DIGITS_QUANTICO }, { "teko", DIGITS_TEKO }, { "orbitron", DIGITS_ORBITRON }, { "squada", DIGITS_SQUADA },
+  };
+  for (unsigned i = 0; i < ARRAY_LENGTH(STYLES); i++) {
+    if (strcmp(name, STYLES[i].name) == 0) return STYLES[i].style;
+  }
+  return DIGITS_SEGMENT;
+}
+
 static void inbox_handler(DictionaryIterator *iter, void *context) {
   Tuple *t;
   bool settings_changed = false;
@@ -2495,21 +2525,14 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     settings_changed = true;
   }
   // Appearance
-  bool font_changed = false;
   if ((t = dict_find(iter, MESSAGE_KEY_DigitStyle))) {
-    const char *d = t->value->cstring;
-    static const struct { const char *name; uint8_t style; } STYLES[] = {
-      { "dotted", DIGITS_DOTTED }, { "hollow", DIGITS_HOLLOW }, { "iceberg", DIGITS_ICEBERG },
-      { "light", DIGITS_MODERN_LIGHT }, { "bold", DIGITS_MODERN_BOLD }, { "matrix", DIGITS_MATRIX },
-      { "matrixdot", DIGITS_MATRIX_DOTTED }, { "classicbold", DIGITS_CLASSIC_BOLD }, { "bebas", DIGITS_BEBAS },
-      { "quantico", DIGITS_QUANTICO }, { "teko", DIGITS_TEKO }, { "orbitron", DIGITS_ORBITRON }, { "squada", DIGITS_SQUADA },
-    };
-    uint8_t style = DIGITS_SEGMENT;
-    for (unsigned i = 0; i < ARRAY_LENGTH(STYLES); i++) {
-      if (strcmp(d, STYLES[i].name) == 0) style = STYLES[i].style;
-    }
-    font_changed = style != s_settings.digit_style;
-    s_settings.digit_style = style;
+    s_settings.digit_style = parse_digit_style(t->value->cstring);
+    settings_changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_NightDigits))) {  // "day", or a style (not a dotted one)
+    const char *v = t->value->cstring;
+    const int style = parse_digit_style(v);
+    s_settings.night_digits = strcmp(v, "day") == 0 || dotted_style(style) ? 0 : style + 1;
     settings_changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_LineStyle))) {
@@ -2609,7 +2632,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
 
   if (settings_changed) {
     persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
-    if (font_changed) load_digit_font();
     apply_theme();
     apply_backlight();
     if (s_settings.show_steps) update_steps();
@@ -2667,7 +2689,9 @@ static void init(void) {
   if (s_settings.show_phone_battery > 1) s_settings.show_phone_battery = 1;
   if (s_settings.night_mode > 1) s_settings.night_mode = 0;
   if (s_settings.show_rain > 1) s_settings.show_rain = 1;
-  load_digit_font();
+  if (s_settings.night_digits > DIGITS_COUNT || (s_settings.night_digits && dotted_style(s_settings.night_digits - 1))) {
+    s_settings.night_digits = 0;
+  }
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
   if (s_weather.has_range > 1) s_weather.has_range = 0;

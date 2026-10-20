@@ -33,6 +33,12 @@ module.exports = function () {
       sync();
     });
 
+    // The night digit style only matters with Night mode on.
+    var nightMode = item('NightMode'), nightDigits = item('NightDigits');
+    function syncNight() { if (nightMode.get()) nightDigits.show(); else nightDigits.hide(); }
+    nightMode.on('change', syncNight);
+    syncNight();
+
     // The individual colours only matter while "Use custom colors" is on (they are all in the
     // group "colors"); the Inverted switch is replaced by them then. (Case color always applies.)
     var customColors = item('CustomColors'), inverted = item('Inverted');

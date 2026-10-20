@@ -147,7 +147,25 @@ module.exports = [
       {
         "type": "toggle", "messageKey": "NightMode", "label": "Night mode",
         "defaultValue": false,
-        "description": "From sunset to sunrise (the times come with the weather): a white case and LCD, black text (no unlit segments), a red heart, dark gray lines, a light blue BT and an amber DST, in the same digit style. Custom colors and Inverted colors apply in the day."
+        "description": "From sunset to sunrise (the times come with the weather): a white case and LCD, black text (no unlit segments), a red heart, dark gray lines, a light blue BT and an amber DST, in the Night digit style below. Custom colors and Inverted colors apply in the day."
+      },
+      {
+        "type": "select", "messageKey": "NightDigits", "label": "Night digit style", "defaultValue": "day",
+        "description": "The digits from sunset to sunrise; the day's style comes back at sunrise. Same as day uses 7-segment instead of the dotted styles, too faint at night.",
+        "options": [
+          { "label": "Same as day", "value": "day" },
+          { "label": "7-segment", "value": "segment" },
+          { "label": "Classic Bold", "value": "classicbold" },
+          { "label": "Hollow segments", "value": "hollow" },
+          { "label": "Modern Light", "value": "light" },
+          { "label": "Modern Bold", "value": "bold" },
+          { "label": "Angular (based on Iceberg)", "value": "iceberg" },
+          { "label": "Bebas Neue", "value": "bebas" },
+          { "label": "Teko", "value": "teko" },
+          { "label": "Tactical (based on Quantico)", "value": "quantico" },
+          { "label": "Orbital (based on Orbitron)", "value": "orbitron" },
+          { "label": "Squared (based on Squada One)", "value": "squada" }
+        ]
       },
       {
         "type": "select", "messageKey": "DigitStyle", "label": "Digit style", "defaultValue": "segment",
