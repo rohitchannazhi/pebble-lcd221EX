@@ -2038,19 +2038,22 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_W 41
 #define PILL_H 13
 #define PILL_R 5
-// The weather layout's pills, in the bottom box: narrower and taller.
-#define SMALL_PILL_W 34
-#define SMALL_PILL_H 18
-#define SMALL_PILL_R 7
+// The weather layout's pills, in the bottom box: smaller, squarer and further apart.
+#define SMALL_PILL_W 32
+#define SMALL_PILL_H 14
+#define SMALL_PILL_R 3
+#define SMALL_PILL_GAP_X 6
+#define SMALL_PILL_GAP_Y 8
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   // BT and DST on the right, CHG (or PM) and the chance of rain on the left (CHG level with the
   // middle of the two without it). The weather layout's bottom box has the same 2x2 grid, in
   // SMALL_PILL_W x SMALL_PILL_H pills.
   const bool wx = s_settings.weather_box;
   const int pw = wx ? SMALL_PILL_W : PILL_W, ph = wx ? SMALL_PILL_H : PILL_H, pr = wx ? SMALL_PILL_R : PILL_R;
-  const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - 2) / 2, gy = (IND_BOTTOM_H - 2 * SMALL_PILL_H - 4) / 2;
-  const int right_x = wx ? gx + SMALL_PILL_W + 2 : 44, left_x = wx ? gx : 1;
-  const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + 4 : 15;
+  const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - SMALL_PILL_GAP_X) / 2;
+  const int gy = (IND_BOTTOM_H - 2 * SMALL_PILL_H - SMALL_PILL_GAP_Y) / 2;
+  const int right_x = wx ? gx + SMALL_PILL_W + SMALL_PILL_GAP_X : 44, left_x = wx ? gx : 1;
+  const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + SMALL_PILL_GAP_Y : 15;
   const uint8_t SLOT[INDICATORS][2] = {
     { right_x, top_y },                                     // BT
     { left_x, wx || ind[3].label ? top_y : 7 },             // CHG / PM
