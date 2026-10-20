@@ -1547,9 +1547,9 @@ static void draw_rules(void) {
                             // matching window edge), 2 px below them
       const int outer_bottom = s_settings.edge_style == EDGE_MATCH ? 0 : CORNER_BL | CORNER_BR;
       draw_brackets(2, xd - 3, y0 + 1, yb - 1, (CORNER_TL | CORNER_TR | CORNER_BR) | (outer_bottom & CORNER_BL),
-                    8, 1, c);
+                    10, 2, c);
       draw_brackets(xd + 4, LCD_W - 3, y0 + 1, yb - 1, (CORNER_TL | CORNER_TR | CORNER_BL) | (outer_bottom & CORNER_BR),
-                    8, 1, c);
+                    10, 2, c);
       break;
     }
     case LINES_HUD: {  // the line splits into two 45-degree arms that meet the divider, with angled tips
