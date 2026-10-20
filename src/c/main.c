@@ -1040,7 +1040,7 @@ static int row_to_drop(const FitRows buf, const int *rows, int n, int x0, int x1
 }
 
 static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, int height, GColor color,
-                             int density, bool right) {
+                             int density, int align) {
   if (color.argb == s_lcd.argb) return;  // invisible, and the ink could not be told from the LCD
   // Gothic 18 bold capitals start 7px below the text box's top.
   GRect box = GRect(cell.origin.x - 1, cell.origin.y - 7, cell.size.w + 2, 22);
@@ -1112,7 +1112,7 @@ static void draw_fitted_text(GContext *ctx, const char *text, GRect cell, int he
     letter++;
   }
 
-  int ox = right ? x1 + 1 - kept : (x0 + x1 + 1) / 2 - kept / 2, oy = y0 + (cell.size.h - rows_out) / 2;
+  int ox = align == ALIGN_RIGHT ? x1 + 1 - kept : align == ALIGN_LEFT ? x0 : (x0 + x1 + 1) / 2 - kept / 2, oy = y0 + (cell.size.h - rows_out) / 2;
   for (int y = 0; y < rows_out; y++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, oy + y);
     for (int i = 0; i < kept; i++) {
@@ -1982,9 +1982,10 @@ static const char *tiny_letter(char ch) {
   }
 }
 
-static void draw_tiny_label(const char *text, GRect cell, bool right, GColor color, int density) {
+static void draw_tiny_label(const char *text, GRect cell, int align, GColor color, int density) {
   const int tw = 8 * (int)strlen(text) - 2;
-  int x = right ? cell.origin.x + cell.size.w - tw : cell.origin.x + (cell.size.w - tw) / 2;
+  int x = align == ALIGN_RIGHT ? cell.origin.x + cell.size.w - tw
+      : align == ALIGN_LEFT ? cell.origin.x : cell.origin.x + (cell.size.w - tw) / 2;
   const int y = cell.origin.y + (cell.size.h - 10) / 2;
   for (; *text; text++, x += 8) {
     const char *bits = tiny_letter(*text);
@@ -1998,25 +1999,25 @@ static void draw_tiny_label(const char *text, GRect cell, bool right, GColor col
   }
 }
 
-// An indicator's label in `cell`: lit, or faint dots when off. The system font fitted to the
-// cell, or the digit style's font.
-static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, bool right) {
+// An indicator's label in `cell` (`align`: ALIGN_LEFT, ...): lit, or faint dots when off. The
+// system font fitted to the cell, or the digit style's font.
+static void draw_indicator_label(GContext *ctx, const Indicator *ind, GRect cell, int align) {
   const GColor color = ind->on ? ind->ink : s_ghost;
   const int density = ind->on ? DENSITY_FULL : s_label_off_density;
   if (s_settings.digit_style == DIGITS_MATRIX || s_settings.digit_style == DIGITS_MATRIX_DOTTED) {
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
-    draw_tiny_label(ind->label, cell, right, color, density);
+    draw_tiny_label(ind->label, cell, align, color, density);
     graphics_release_frame_buffer(ctx, s_fb);
     s_fb = NULL;
     return;
   }
   if (!font_active()) {
-    draw_fitted_text(ctx, ind->label, cell, LABEL_H, color, density, right);
+    draw_fitted_text(ctx, ind->label, cell, LABEL_H, color, density, align);
     return;
   }
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   font_draw_text(FG_LABEL, ind->label, cell.origin.x, cell.size.w,
-                 cell.origin.y + (cell.size.h + font_height(FG_LABEL)) / 2, right ? ALIGN_RIGHT : ALIGN_CENTER,
+                 cell.origin.y + (cell.size.h + font_height(FG_LABEL)) / 2, align,
                  color, density);
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
@@ -2037,23 +2038,24 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_W 41
 #define PILL_H 13
 #define PILL_R 5
-// The weather layout's two pills (BT and DST), bigger, one above the other in the bottom box.
-#define BIG_PILL_W 58
-#define BIG_PILL_H 18
-#define BIG_PILL_R 7
+// The weather layout's pills, in the bottom box: narrower and taller.
+#define SMALL_PILL_W 34
+#define SMALL_PILL_H 18
+#define SMALL_PILL_R 7
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   // BT and DST on the right, CHG (or PM) and the chance of rain on the left (CHG level with the
-  // middle of the two without it). In the weather layout, one column in the middle of the box: BT,
-  // DST and the chance of rain, as big as fits.
-  const bool wx = s_settings.weather_box, rain = ind[3].label != NULL;
-  const int pw = wx ? BIG_PILL_W : PILL_W, ph = wx ? (rain ? 14 : BIG_PILL_H) : PILL_H;
-  const int pr = wx ? (rain ? 6 : BIG_PILL_R) : PILL_R, gap = rain ? 2 : 4;
-  const int bx = (IND_BOTTOM_W - BIG_PILL_W) / 2, by = (IND_BOTTOM_H - (rain ? 3 : 2) * (ph + gap) + gap) / 2;
+  // middle of the two without it). The weather layout's bottom box has the same 2x2 grid, in
+  // SMALL_PILL_W x SMALL_PILL_H pills.
+  const bool wx = s_settings.weather_box;
+  const int pw = wx ? SMALL_PILL_W : PILL_W, ph = wx ? SMALL_PILL_H : PILL_H, pr = wx ? SMALL_PILL_R : PILL_R;
+  const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - 2) / 2, gy = (IND_BOTTOM_H - 2 * SMALL_PILL_H - 4) / 2;
+  const int right_x = wx ? gx + SMALL_PILL_W + 2 : 44, left_x = wx ? gx : 1;
+  const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + 4 : 15;
   const uint8_t SLOT[INDICATORS][2] = {
-    { wx ? bx : 44, wx ? by : 0 },                          // BT
-    { 1, rain ? 0 : 7 },                                    // CHG / PM (not in the weather layout)
-    { wx ? bx : 44, wx ? by + ph + gap : 15 },              // DST
-    { wx ? bx : 1, wx ? by + 2 * (ph + gap) : 15 },         // the chance of rain
+    { right_x, top_y },                                     // BT
+    { left_x, wx || ind[3].label ? top_y : 7 },             // CHG / PM
+    { right_x, bottom_y },                                  // DST
+    { left_x, bottom_y },                                   // the chance of rain
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
@@ -2062,7 +2064,7 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
     // pill on a white LCD), otherwise black in a light pill and white in a dark one.
     const GColor text = is_dark(ind[i].ink) != is_dark(s_lcd) ? s_lcd
         : is_dark(ind[i].ink) ? GColorWhite : GColorBlack;
-    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + (ph - LABEL_H) / 2, pw - 4, LABEL_H), false);
+    draw_indicator_label(ctx, &ind[i], GRect(x + 2, y + (ph - LABEL_H) / 2, pw - 4, LABEL_H), ALIGN_CENTER);
     if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
     for (int yy = y; yy < y + ph; yy++) {
       GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
@@ -2082,20 +2084,22 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
 }
 
 // Active only: the labels of the indicators that are on, right-aligned, two to a column (the
-// right column first); in the weather layout, centred one above the other. Nothing is shown for
+// right column first); in the weather layout, left-justified, two to a row. Nothing is shown for
 // the others.
 static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
   int n = 0, count = 0;
   for (int i = 0; i < INDICATORS; i++) count += ind[i].label && ind[i].on;
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || !ind[i].on) continue;
-    if (s_settings.weather_box) {
-      const int y = IND_Y0 + (IND_BOTTOM_H - (16 * count - 4)) / 2 + 16 * n++;
-      draw_indicator_label(ctx, &ind[i], GRect(IND_X0 + 4, y, IND_BOTTOM_W - 8, 12), false);
+    if (s_settings.weather_box) {  // two to a row, left-justified, on up to two rows
+      const int rows = (count + 1) / 2, col = n % 2, row = n / 2;
+      const int y = IND_Y0 + (IND_BOTTOM_H - (16 * rows - 4)) / 2 + 16 * row;
+      draw_indicator_label(ctx, &ind[i], GRect(IND_X0 + 4 + 34 * col, y, 32, 12), ALIGN_LEFT);
+      n++;
       continue;
     }
     const int right = n < 2 ? BOX_RIGHT + 1 : BOX_DIV - 2;  // right edge of the column
-    draw_indicator_label(ctx, &ind[i], GRect(right - 42, IND_Y0 + 1 + (n % 2) * 15, 42, 12), true);
+    draw_indicator_label(ctx, &ind[i], GRect(right - 42, IND_Y0 + 1 + (n % 2) * 15, 42, 12), ALIGN_RIGHT);
     n++;
   }
 }
@@ -2143,7 +2147,7 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
   s_fb = NULL;
   if (pm_cell && (ind[1].on || s_settings.ghosts)) {
     const GRect cell = wx ? GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H) : GRect(IND_X0 + 24, IND_Y0 + 9, 24, LABEL_H);
-    draw_indicator_label(ctx, &ind[1], cell, false);
+    draw_indicator_label(ctx, &ind[1], cell, ALIGN_CENTER);
   }
 }
 
@@ -2163,8 +2167,8 @@ static void draw_indicators(GContext *ctx) {
   const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
     // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
-    // The weather layout has no CHG: the battery icon's bolt shows it.
-    { pm_cell ? "PM" : s_settings.weather_box ? NULL : full ? "FULL" : "CHG",
+    // (In the weather layout's Icons style there is no bolt: the battery icon's shows charging.)
+    { pm_cell ? "PM" : full ? "FULL" : "CHG",
       pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full, pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
     { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
     { s_settings.show_rain ? rain_text : NULL, rain_known && s_weather.rain - 1 >= RAIN_LIT, s_col[COL_MUTE] },
