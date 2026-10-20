@@ -24,3 +24,4 @@ New: the next sunrise or sunset on the bottom bezel, between the heart rate and 
 New: your phone's battery level in the middle of the top bezel (Android; can be turned off).
 New: four more digit styles: Teko, Tactical (based on Quantico), Orbital (based on Orbitron) and Squared (based on Squada One).
 Fixed: a lit indicator pill in a light color has black text (it was the LCD's white).
+New: Night mode (optional): from sunset to sunrise, black on white with a red heart, a light blue BT and an amber DST.

@@ -145,6 +145,11 @@ module.exports = [
         "description": "Light digits on a dark LCD, like a negative-display watch. The case keeps its color."
       },
       {
+        "type": "toggle", "messageKey": "NightMode", "label": "Night mode",
+        "defaultValue": false,
+        "description": "From sunset to sunrise (the times come with the weather): a white case and LCD, black text (no unlit segments), a red heart, dark gray lines, a light blue BT and an amber DST, in the same digit style. Custom colors and Inverted colors apply in the day."
+      },
+      {
         "type": "select", "messageKey": "DigitStyle", "label": "Digit style", "defaultValue": "segment",
         "description": "Every number on the LCD (not the top and bottom bars), with faint unlit segments or dots. Hollow segments and the Modern styles show the weekday in 14-segment letters; the Dot matrix styles and Dotted segments in dots.",
         "options": [

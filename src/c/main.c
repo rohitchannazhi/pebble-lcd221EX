@@ -105,6 +105,7 @@ typedef struct {
   uint8_t lcd_dots;            // 1: the LCD background dotted (25%) in the unlit segments' colour
   uint8_t show_sun;            // 1: the next sunrise or sunset on the bottom bezel
   uint8_t show_phone_battery;  // 1: the phone's battery level in the top bezel's middle
+  uint8_t night_mode;          // 1: the night colours from sunset to sunrise (see apply_theme)
 } Settings;
 
 typedef struct {
@@ -790,8 +791,46 @@ static void update_steps(void) {
 // True for colours a "light on dark" treatment suits (the ghosts are fainter on those).
 static bool is_dark(GColor c) { return 299 * c.r + 587 * c.g + 114 * c.b < 1500; }
 
+// Whether the sun is down at `now` (*night), from the last sunrise or sunset before it among the
+// ones the phone sent (each moved back a day at a time until it is before `now`, as they move only
+// minutes a day). False while none came yet.
+static bool sun_is_down(time_t now, bool *night) {
+  time_t best = 0;
+  for (int i = 0; i < 4; i++) {
+    time_t t = s_weather.sun[i];
+    if (t <= 0) continue;
+    if (t > now) t -= ((t - now) / 86400 + 1) * 86400;
+    if (!best || t > best) {
+      best = t;
+      *night = i % 2 == 1;  // the last one was a sunset
+    }
+  }
+  return best != 0;
+}
+
+// Night mode: on (and the sunrise and sunset known) from sunset to sunrise.
+static bool s_night;
+static bool night_now(void) {
+  bool night = false;
+  return s_settings.night_mode && sun_is_down(time(NULL), &night) && night;
+}
+
+// The night colours: black on a white LCD and a white case (the unlit segments white too, so not
+// shown), with a red heart, dark gray lines and window edge, a light blue BT and an amber DST. (The
+// digit style stays the day's.)
+static void use_night_colors(void) {
+  for (int i = 0; i < COL_COUNT; i++) s_col[i] = GColorBlack;
+  s_col[COL_CASE] = s_col[COL_LCD] = GColorWhite;
+  s_col[COL_UNLIT] = GColorWhite;  // no unlit segments or faint labels at night
+  s_col[COL_BADGE] = GColorFromHEX(0xFF0000);
+  s_col[COL_EDGE] = s_col[COL_RULES] = GColorDarkGray;
+  s_col[COL_BT] = GColorFromHEX(0x55AAFF);
+  s_col[COL_DST] = GColorFromHEX(0xFFAA00);
+}
+
 static void apply_theme(void) {
   bool inv = s_settings.inverted;
+  s_night = night_now();
 
   // One colour per component: the custom ones, or else the normal or inverted LCD. The case is
   // black, silver or a colour of its own either way (Case color).
@@ -812,6 +851,7 @@ static void apply_theme(void) {
     s_col[COL_LCD] = inv ? GColorBlack : GColorWhite;
     s_col[COL_UNLIT] = inv ? GColorDarkGray : GColorLightGray;
   }
+  if (s_night) use_night_colors();  // instead of all of the above
   s_lcd = s_col[COL_LCD];
   s_ghost = s_col[COL_UNLIT];
 
@@ -2164,6 +2204,7 @@ static void refresh_weather_if_needed(void) {
 // Once a minute (the hour too, so a whole-hour time zone change redraws at once).
 static void tick_handler(struct tm *now, TimeUnits changed) {
   s_now = *now;
+  if (night_now() != s_night) apply_theme();  // sunset or sunrise
   if (s_settings.show_steps) update_steps();
   if (now->tm_min % WEATHER_REFRESH_MIN == 0) refresh_weather_if_needed();
   layer_mark_dirty(s_canvas);
@@ -2414,6 +2455,10 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_phone_battery = v >= 0 && v <= 100 ? v : -1;
     if (s_canvas) layer_mark_dirty(s_canvas);
   }
+  if ((t = dict_find(iter, MESSAGE_KEY_NightMode))) {
+    s_settings.night_mode = tuple_int(t) ? 1 : 0;
+    settings_changed = true;
+  }
   if ((t = dict_find(iter, MESSAGE_KEY_ShowPhoneBattery))) {
     s_settings.show_phone_battery = tuple_int(t) ? 1 : 0;
     settings_changed = true;
@@ -2524,6 +2569,7 @@ static void init(void) {
   if (s_settings.lcd_dots > 1) s_settings.lcd_dots = 0;
   if (s_settings.show_sun > 1) s_settings.show_sun = 1;
   if (s_settings.show_phone_battery > 1) s_settings.show_phone_battery = 1;
+  if (s_settings.night_mode > 1) s_settings.night_mode = 0;
   load_digit_font();
   s_bezel_font = load_font(RESOURCE_ID_FONT_BEZEL, BG_COUNT);
   persist_read_data(WEATHER_KEY, &s_weather, sizeof(s_weather));
