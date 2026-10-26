@@ -73,8 +73,8 @@ heart rate and weather are sample values.
 | Custom colors | Use custom colors | Off. When on, every part of the face except the case (which keeps its **Case color**) takes the color chosen below, and **Inverted colors** is ignored. The pickers start out as the normal black-on-white theme |
 | | Bezels | Top bezel left text, top bezel right text, bottom bezel heart, heart rate, label |
 | | LCD panel | LCD window edge (the lines above and below the LCD, in any Window edge style), LCD background, unlit segments and labels |
-| | Weekday and indicators | Weekday and day, BT, CHG / FULL, DST |
-| | Time | Hour digits, colon, minute digits, PM |
+| | Weekday and indicators | Weekday and day, BT, CHG / FULL, DST, PM |
+| | Time | Hour digits, colon, minute digits |
 | | Bottom row | Low / high temperature, divider lines, temperature (including the degree mark) |
 | Alerts | Vibrate on phone disconnect | Double pulse (None, Short, Long, Double, Triple, Heartbeat, SOS) |
 | | Vibrate on phone reconnect | Short pulse (same patterns) |
