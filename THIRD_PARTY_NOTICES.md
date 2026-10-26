@@ -28,7 +28,7 @@ Classic** (Bold) by **keshikan**,
   so they are offered as "Modern" and "Classic Bold" and not under the reserved name; they stay under the same
   licence and are not sold on their own.
 
-## Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Saira, Chakra Petch, Barlow and Oxanium (pre-rendered fonts)
+## Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Chakra Petch, Barlow and Oxanium (pre-rendered fonts)
 
 The "Digit style" font and the bezels' font are pre-rendered by `tools/gen_fonts.py` into the bitmap files in
 `resources/fonts/` (only the characters the face uses, at its sizes, some slightly narrowed).
@@ -36,7 +36,7 @@ The font files themselves are not included.
 
 - **Iceberg**: Copyright (c) 2011, Cyreal (www.cyreal.org), with Reserved Font Name "Iceberg". The
   rendered version is a Modified Version, so it is offered as "Angular (based on Iceberg)" and not
-  under the reserved name. Its degree mark is Saira's.
+  under the reserved name.
 - **Bebas Neue**: Copyright (c) 2010 by Dharma Type (no Reserved Font Name). The "Bebas Neue" digit
   style (`bebas.bin`).
 - **Quantico** (Bold): Copyright (c) 2011 Matthew Desmond (http://www.madtype.com), with Reserved
@@ -49,8 +49,6 @@ The font files themselves are not included.
   "Orbital (based on Orbitron)" (`orbitron.bin`).
 - **Squada One**: Copyright (c) 2011, Admix Designs (http://www.admixdesigns.com/), with Reserved
   Font Name "Squada". Offered as "Squared (based on Squada One)" (`squada.bin`).
-- **Saira** (Saira Extra Condensed Bold): Copyright 2016 The Saira Project Authors
-  (omnibus.type@gmail.com), with Reserved Font Name "Saira". Only Angular's degree mark.
 - **Chakra Petch** (SemiBold): Copyright 2018 The Chakra Petch Project Authors
   (https://github.com/m4rc1e/Chakra-Petch.git). The top and bottom bezels' text (`bezel.bin`).
 - **Barlow** (Semi Condensed Bold): Copyright 2017 The Barlow Project Authors

@@ -221,11 +221,6 @@ module.exports = [
         "description": "While rain is possible in the next hour (above 0%), a pill with a raindrop and the chance (e.g. 40%) takes the bottom bezel label's place; the label is back when it is 0%. From the weather, for your location."
       },
       {
-        "type": "toggle", "messageKey": "WeatherBox", "label": "Weather layout",
-        "defaultValue": false,
-        "description": "The weather's picture and the temperature next to the weekday, the indicators in the bottom row's right box (two to a row), and in 12-hour time the P inside the hour's first digit."
-      },
-      {
         "type": "select", "messageKey": "LcdBackground", "label": "Screen background", "defaultValue": "plain",
         "description": "Dots on a quarter of the background, in the unlit segments' color (light gray, or dark gray with Inverted colors).",
         "options": [

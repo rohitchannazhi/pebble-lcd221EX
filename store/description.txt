@@ -6,7 +6,7 @@ WHAT IT SHOWS
 - Top bezel: battery level and step count, or your own text instead of either
 - Bottom bezel: a heart and your latest heart rate, plus a text label of your choice
 - Indicators for phone connection, charging and daylight saving time; the colon turns into a line during Quiet Time
-- The next sunrise or sunset, and an optional weather picture
+- A picture of the weather, and the next sunrise or sunset
 
 SETTINGS
 Live preview. Black, silver or any color case, inverted colors, 14 digit styles (segments, dots, a font), divider, window edge and indicator styles, a color for every part of the face, backlight color, and vibration on phone disconnect or reconnect.
@@ -17,4 +17,4 @@ Location (through your phone) for the weather, and health data for steps and hea
 Pebble Time 2 only.
 
 CREDITS
-Weather by Open-Meteo.com. Fonts: 7-Segment by Jan Bobrowski; DSEG, Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Saira, Oxanium, Chakra Petch (SIL OFL). Casio and W-221H are trademarks of Casio Computer Co., Ltd.; an unofficial tribute, not affiliated with Casio or Pebble.
+Weather by Open-Meteo.com. Fonts: 7-Segment by Jan Bobrowski; DSEG, Iceberg, Bebas Neue, Quantico, Teko, Orbitron, Squada One, Oxanium, Chakra Petch, Barlow (SIL OFL). Casio and W-221H are trademarks of Casio Computer Co., Ltd.; an unofficial tribute, not affiliated with Casio or Pebble.

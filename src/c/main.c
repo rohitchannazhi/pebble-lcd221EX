@@ -101,7 +101,7 @@ typedef struct {
   uint8_t case_custom;         // 1: the case in case_argb instead of black or silver
   uint8_t case_argb;           // GColor8 of the custom case colour
   // Added after that (older saves are shorter: these keep their defaults)
-  uint8_t weather_box;         // 1: the weather layout (weather in the top row, indicators in the bottom one)
+  uint8_t unused_weather_box;  // (was the "Weather layout" switch: that layout is the only one now)
   uint8_t lcd_dots;            // 1: the LCD background dotted (25%) in the unlit segments' colour
   uint8_t show_sun;            // 1: the next sunrise or sunset on the bottom bezel
   uint8_t show_phone_battery;  // 1: the phone's battery level in the top bezel's middle
@@ -570,8 +570,7 @@ static void draw_matrix_sign(int x, int y, int h, bool one, int px, GColor ink) 
 // Fonts for the other digit styles: pre-rendered glyphs (tools/gen_fonts.py, resources/fonts)
 
 // The font file's groups, one per screen area (the order of GROUPS in tools/gen_fonts.py).
-typedef enum { FG_TIME, FG_WEEKDAY, FG_DATE, FG_RANGE, FG_RIGHT, FG_LABEL, FG_COUNT } FontGroup;
-#define DEGREE_CHAR '\xB0'  // the degree mark's code in the font file
+typedef enum { FG_TIME, FG_WEEKDAY, FG_DATE, FG_RANGE, FG_LABEL, FG_COUNT } FontGroup;
 enum { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT };
 
 static uint8_t *s_font;  // the selected font's file, or NULL for the 7-segment digits
@@ -883,13 +882,11 @@ static void apply_backlight(void) {
 #define BEZEL_H (LCD_Y - 2)
 _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels are not the same height");
 
-// Row 1: weekday and day of the month (left) and the indicators (right), in the rows
-// BOX_TOP..BOX_BOTTOM.
+// Row 1: weekday and day of the month (left) and the weather (right), in the rows
+// BOX_TOP..BOX_BOTTOM (the weather reaching a little lower).
 #define WEEKDAY_X 6
 #define WEEKDAY_Y 35
-#define BOX_RIGHT 191   // the indicators' right edge
-#define BOX_DIV 152     // the "active only" style's second column ends 2 px left of this
-#define BOX_TOP 35      // the indicators' row: top (= weekday top)
+#define BOX_TOP 35      // the row's top (= weekday top)
 #define BOX_BOTTOM 63   // and bottom (= weekday bottom)
 #define LABEL_H 10      // indicator label height in rows
 
@@ -901,21 +898,10 @@ _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels ar
 #define TIME_Y 78
 #define TIME_W 35
 #define TIME_H 70
-// (A font's or the dot matrix's leading 0 has no room inside: the P is between the colon's dots then.)
 
-// Row 3: today's low and high (left) and the temperature (right), under a 2px rule.
+// Row 3: today's low and high (left) and the indicators (right), under a 2px rule.
 #define ROW3_LINE_Y 156
-#define ROW3_DIV_X 126  // vertical divider between the low / high box and the right box
-#define ROW3_H 36       // height of the right box's digits
-// The right box's digits and the temperature's parts: the sign slot's
-// minus, the full-width digit whose right verticals make the "1" of 100+, the two digits and
-// the degree mark.
-#define RIGHT_DIGIT_W 19
-#define TEMP_MINUS_X 130
-#define TEMP_ONE_X 121
-#define TEMP_D1_X 144
-#define TEMP_D2_X 166
-#define TEMP_DEG_X 188
+#define ROW3_DIV_X 126  // vertical divider between the low / high box and the indicators' box
 
 // Bezels: the top of the bezel font's capitals at its full size in each bezel, where the icons
 // line up.
@@ -1285,9 +1271,6 @@ static void draw_month_day(void) {
   draw_digit(89, WEEKDAY_Y, w, h, d % 10, s_col[COL_WEEKDAY]);
 }
 
-// The right box: the temperature. A half-width sign slot (minus, or the
-// "1" of 100+ in Fahrenheit) followed by two digits, so -99..199 all fit; "--"
-// while there is no recent weather.
 // Degree mark: a round 7x7 ring, 2px thick.
 static const char DEGREE_BITS[] =
   "..###.."
@@ -1297,47 +1280,6 @@ static const char DEGREE_BITS[] =
   "##...##"
   ".#####."
   "..###..";
-
-static void draw_temperature(void) {
-  const GColor ink = s_col[COL_RIGHT];
-  const int dy = row3_base(ROW3_H) - ROW3_H, dh = ROW3_H;
-  int temp = display_temp(s_weather.temp), v = abs(temp);
-  bool valid = weather_valid();
-  bool neg = valid && temp < 0, hundred = valid && v >= 100;
-  if (font_active()) {
-    // Centred in the box. Below zero or from 100 up there is no degree mark, so the font can stay
-    // as big as two digits and a degree mark allow (tools/gen_fonts.py).
-    char text[8];
-    if (!valid) snprintf(text, sizeof(text), "--%c", DEGREE_CHAR);
-    else if (neg || hundred) snprintf(text, sizeof(text), "%d", temp);
-    else snprintf(text, sizeof(text), "%d%c", temp, DEGREE_CHAR);
-    font_draw_text(FG_RIGHT, text, ROW3_DIV_X + 2, LCD_W - ROW3_DIV_X - 2, row3_base(font_height(FG_RIGHT)),
-                   ALIGN_CENTER, ink, DENSITY_FULL);
-    return;
-  }
-  // The minus is the font's middle bar in a narrow box; the "1" is the right
-  // verticals of a full-width digit placed so they land in the sign slot.
-  // Unlit parts go first so the lit one is never covered by a ghost.
-  const int w = RIGHT_DIGIT_W;
-  if (s_matrix) {  // the minus or the 1, without ghosts
-    if (neg) draw_matrix_sign(TEMP_MINUS_X + 2, dy, dh, false, 3, ink);
-    if (hundred) draw_matrix_sign(TEMP_MINUS_X + 3, dy, dh, true, 3, ink);
-  } else {
-    if (!neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, 0, SEG_G, ink);
-    if (!hundred) draw_segments(TEMP_ONE_X, dy, w, dh, 0, SEG_B | SEG_C, ink);
-    if (neg) draw_segments(TEMP_MINUS_X, dy, 13, dh, SEG_G, SEG_G, ink);
-    if (hundred) draw_segments(TEMP_ONE_X, dy, w, dh, SEG_B | SEG_C, SEG_B | SEG_C, ink);
-  }
-  if (!valid) {
-    draw_digit(TEMP_D1_X, dy, w, dh, DIGIT_MINUS, ink);
-    draw_digit(TEMP_D2_X, dy, w, dh, DIGIT_MINUS, ink);
-  } else {
-    int tens = (v >= 10) ? v / 10 % 10 : DIGIT_BLANK;
-    draw_digit(TEMP_D1_X, dy, w, dh, tens, ink);
-    draw_digit(TEMP_D2_X, dy, w, dh, v % 10, ink);
-  }
-  draw_dots(TEMP_DEG_X, dy, DEGREE_BITS, 7, 7, 1, 1, true, ink);
-}
 
 // Today's low and high side by side, centred in the
 // bottom row, with a short divider between them. Each is a mark (a tall arrow, a triangle, or
@@ -1731,8 +1673,7 @@ static void draw_lcd(void) {
   use_digits(AREA_OTHER);
   draw_rules();
   draw_temperature_range();
-  if (s_settings.weather_box) draw_weather_box();
-  else draw_temperature();
+  draw_weather_box();
   if (s_settings.lcd_dots) draw_lcd_dots();
 }
 
@@ -1940,12 +1881,11 @@ typedef struct {
   GColor ink;
 } Indicator;
 
-// The top-left corner of the area the indicator styles share: right of the weekday, or (the
-// weather layout) the bottom row's right box, IND_BOTTOM_W x IND_BOTTOM_H.
-#define IND_X0 (s_settings.weather_box ? ROW3_DIV_X + 2 : 107)
-#define IND_Y0 (s_settings.weather_box ? ROW3_LINE_Y + 2 : BOX_TOP)
-#define IND_BOTTOM_W (LCD_W - ROW3_DIV_X - 2)
-#define IND_BOTTOM_H (LCD_Y + LCD_H - ROW3_LINE_Y - 2)
+// The indicators' box: the bottom row's right box (its top-left corner, width and height).
+#define IND_X0 (ROW3_DIV_X + 2)
+#define IND_Y0 (ROW3_LINE_Y + 2)
+#define IND_W (LCD_W - ROW3_DIV_X - 2)
+#define IND_H (LCD_Y + LCD_H - ROW3_LINE_Y - 2)
 
 // The "Dot matrix" style's indicator labels: 3x5 letters of 2x2 px dots (10 px tall), 2 px apart.
 static const char *tiny_letter(char ch) {
@@ -1963,18 +1903,6 @@ static const char *tiny_letter(char ch) {
     case 'S': return "####..###..####";
     case 'T': return "###.#..#..#..#.";
     case 'U': return "#.##.##.##.####";
-    case '0': return "####.##.##.####";
-    case '1': return ".#.##..#..#.###";
-    case '2': return "###..#####..###";
-    case '3': return "###..####..####";
-    case '4': return "#.##.####..#..#";
-    case '5': return "####..###..####";
-    case '6': return "####..####.####";
-    case '7': return "###..#..#..#..#";
-    case '8': return "####.#####.####";
-    case '9': return "####.####..####";
-    case '%': return "#.#..#.#.#..#.#";
-    case '-': return "......###......";
     default:  return NULL;
   }
 }
@@ -2060,25 +1988,19 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 
 // Pills: each indicator in its own rounded outline; an active one is filled with its colour and
 // its label cut out of it, an inactive one is a faint dotted outline with a faint label.
-#define PILL_W 41
-#define PILL_H 13
-#define PILL_R 5
-// The weather layout's pills, in the bottom box: smaller and squarer, close together in its middle.
-#define SMALL_PILL_W 32
-#define SMALL_PILL_H 18
-#define SMALL_PILL_R 4
-#define SMALL_PILL_GAP_X 4
-#define SMALL_PILL_GAP_Y 2
+// The pills, close together in the middle of the box.
+#define PILL_W 32
+#define PILL_H 18
+#define PILL_R 4
+#define PILL_GAP_X 4
+#define PILL_GAP_Y 2
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   // BT and DST on the right, CHG and PM on the left (in 24-hour time CHG alone, level with the
-  // middle of the two); in the weather layout's bottom box the same, in SMALL_PILL_W x SMALL_PILL_H
-  // pills.
-  const bool wx = s_settings.weather_box;
-  const int pw = wx ? SMALL_PILL_W : PILL_W, ph = wx ? SMALL_PILL_H : PILL_H, pr = wx ? SMALL_PILL_R : PILL_R;
-  const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - SMALL_PILL_GAP_X) / 2;
-  const int gy = (IND_BOTTOM_H - 2 * SMALL_PILL_H - SMALL_PILL_GAP_Y) / 2;
-  const int right_x = wx ? gx + SMALL_PILL_W + SMALL_PILL_GAP_X : 44, left_x = wx ? gx : 1;
-  const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + SMALL_PILL_GAP_Y : 15;
+  // middle of the two).
+  const int pw = PILL_W, ph = PILL_H, pr = PILL_R;
+  const int gx = (IND_W - 2 * PILL_W - PILL_GAP_X) / 2, gy = (IND_H - 2 * PILL_H - PILL_GAP_Y) / 2;
+  const int right_x = gx + PILL_W + PILL_GAP_X, left_x = gx;
+  const int top_y = gy, bottom_y = gy + PILL_H + PILL_GAP_Y;
   const uint8_t SLOT[INDICATORS][2] = {
     { right_x, top_y },                                          // BT
     { left_x, ind[3].label ? top_y : (top_y + bottom_y) / 2 },   // CHG
@@ -2112,9 +2034,8 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   }
 }
 
-// Active only: the labels of the indicators that are on, right-aligned, two to a column (the
-// right column first); in the weather layout, right-justified, two to a row, the block centred in
-// the box. Nothing is shown for
+// Active only: the labels of the indicators that are on, right-justified, two to a row, the block
+// centred in the box. Nothing is shown for
 // the others.
 static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
   int n = 0, count = 0, w = 0;  // w: the widest lit label
@@ -2125,26 +2046,20 @@ static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
     if (lw > w) w = lw;
   }
   if (w > 32) w = 32;
-  // The weather layout's two columns, each as wide as the widest label, centred in the box.
-  const int gap = 6, x0 = IND_X0 + (IND_BOTTOM_W - (count > 1 ? 2 * w + gap : w)) / 2;
+  // Two columns, each as wide as the widest label, centred in the box; a row's only one on the right.
+  const int gap = 6, x0 = IND_X0 + (IND_W - (count > 1 ? 2 * w + gap : w)) / 2;
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || !ind[i].on) continue;
-    if (s_settings.weather_box) {  // two to a row, right-justified (a row's only one on the right)
-      const int rows = (count + 1) / 2, row = n / 2;
-      const int col = count == 1 ? 0 : count - 2 * row >= 2 ? n % 2 : 1;
-      const int y = IND_Y0 + (IND_BOTTOM_H - (16 * rows - 4)) / 2 + 16 * row;
-      draw_indicator_label(ctx, &ind[i], GRect(x0 + (w + gap) * col, y, w, 12), ALIGN_RIGHT);
-      n++;
-      continue;
-    }
-    const int right = n < 2 ? BOX_RIGHT + 1 : BOX_DIV - 2;  // right edge of the column
-    draw_indicator_label(ctx, &ind[i], GRect(right - 42, IND_Y0 + 1 + (n % 2) * 15, 42, 12), ALIGN_RIGHT);
+    const int rows = (count + 1) / 2, row = n / 2;
+    const int col = count == 1 ? 0 : count - 2 * row >= 2 ? n % 2 : 1;
+    const int y = IND_Y0 + (IND_H - (16 * rows - 4)) / 2 + 16 * row;
+    draw_indicator_label(ctx, &ind[i], GRect(x0 + (w + gap) * col, y, w, 12), ALIGN_RIGHT);
     n++;
   }
 }
 
 // Icons (double-size pixel art), in one row: Bluetooth, charging and daylight saving time (the
-// sun), then PM as a label in 12-hour time. Faint dots when off.
+// sun), with PM as a label below them in 12-hour time. Faint dots when off.
 static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density) {
   for (int r = 0; r < 2 * n; r++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y + r);
@@ -2162,19 +2077,15 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind) {
   static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
   static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
                                      "..#####..", "...###...", ".#.....#.", "....#...." };
-  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown); PM
-  // after the sun otherwise.
-  const bool wx = s_settings.weather_box, pm = ind[3].label != NULL;
-  const int top = wx ? IND_Y0 + (pm ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
+  const bool pm = ind[3].label != NULL;
+  const int top = IND_Y0 + (pm ? 4 : (IND_H - 18) / 2);  // the icons' 18 px row
   struct { const char *const *rows; int n; int x; int ind; } icon[] = {
-    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : pm ? 3 : 10), 0 },
-    { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + (pm ? 20 : 36), 1 },
-    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : pm ? 36 : 60), 2 },
+    { BT, ARRAY_LENGTH(BT), IND_X0 + 7, 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 27, 1 },
+    { SUN, ARRAY_LENGTH(SUN), IND_X0 + 46, 2 },
   };
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
     const Indicator *it = &ind[icon[k].ind];
-    if (k == 1 && wx) continue;  // no bolt in the weather layout (the battery icon's shows charging)
     if (!it->on && !s_settings.ghosts) continue;
     draw_icon_2x(icon[k].x, top + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
                  it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
@@ -2182,8 +2093,7 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind) {
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
   if (pm && (ind[3].on || s_settings.ghosts)) {
-    const GRect cell = wx ? GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H) : GRect(IND_X0 + 58, IND_Y0 + 9, 26, LABEL_H);
-    draw_indicator_label(ctx, &ind[3], cell, ALIGN_CENTER);
+    draw_indicator_label(ctx, &ind[3], GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H), ALIGN_CENTER);
   }
 }
 
@@ -2516,10 +2426,6 @@ static void inbox_handler(DictionaryIterator *iter, void *context) {
     s_settings.inverted = tuple_int(t);
     settings_changed = true;
   }
-  if ((t = dict_find(iter, MESSAGE_KEY_WeatherBox))) {
-    s_settings.weather_box = tuple_int(t) ? 1 : 0;
-    settings_changed = true;
-  }
   if ((t = dict_find(iter, MESSAGE_KEY_LcdBackground))) {
     s_settings.lcd_dots = strcmp(t->value->cstring, "dots") == 0;
     settings_changed = true;
@@ -2631,7 +2537,7 @@ static void init(void) {
   };
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
-  } else if (persist_get_size(SETTINGS_KEY_SHARED) == (int)offsetof(Settings, weather_box)) {  // its size then
+  } else if (persist_get_size(SETTINGS_KEY_SHARED) == (int)offsetof(Settings, unused_weather_box)) {  // its size then
     // Saved by the build that put Settings under the colours' key: moved to its own key. (The
     // colours it overwrote are lost; they come back with the next Save on the settings page.)
     persist_read_data(SETTINGS_KEY_SHARED, &s_settings, sizeof(s_settings));
@@ -2643,7 +2549,6 @@ static void init(void) {
   if (s_settings.indicator_style >= IND_COUNT) s_settings.indicator_style = IND_PILLS;
   if (s_settings.range_marks >= MARKS_COUNT) s_settings.range_marks = MARKS_TALL;
   if (s_settings.case_custom > 1) s_settings.case_custom = 0;
-  if (s_settings.weather_box > 1) s_settings.weather_box = 0;
   if (s_settings.lcd_dots > 1) s_settings.lcd_dots = 0;
   if (s_settings.show_sun > 1) s_settings.show_sun = 1;
   if (s_settings.show_phone_battery > 1) s_settings.show_phone_battery = 1;

@@ -9,13 +9,13 @@ size is fixed by its widest possible text, so it never changes with the value sh
 
 Fonts (SIL Open Font License 1.1, from https://github.com/google/fonts/tree/main/ofl):
     iceberg/Iceberg-Regular.ttf; bebasneue/BebasNeue-Regular.ttf; quantico/Quantico-Bold.ttf;
-    teko/Teko[wght].ttf; orbitron/Orbitron[wght].ttf; squadaone/SquadaOne-Regular.ttf; sairaextracondensed/SairaExtraCondensed-Bold.ttf, which only lends
-    its degree mark (CHAR_FONT), and oxanium/Oxanium[wght].ttf, its letters (LABEL_FONT);
+    teko/Teko[wght].ttf; orbitron/Orbitron[wght].ttf; squadaone/SquadaOne-Regular.ttf; and
+    oxanium/Oxanium[wght].ttf, which lends its letters (LABEL_FONT);
     chakrapetch/ChakraPetch-SemiBold.ttf for the bezels' text and barlowsemicondensed/
     BarlowSemiCondensed-Bold.ttf for the indicator labels (bezel.bin, see BEZEL_GROUPS).
 Usage (needs Pillow; give them all, as they borrow from each other):
     python3 tools/gen_fonts.py Iceberg-Regular.ttf BebasNeue-Regular.ttf Quantico-Bold.ttf Teko*.ttf \
-        Orbitron*.ttf SquadaOne-Regular.ttf SairaExtraCondensed-Bold.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf \
+        Orbitron*.ttf SquadaOne-Regular.ttf Oxanium*.ttf ChakraPetch-SemiBold.ttf \
         BarlowSemiCondensed-Bold.ttf
 
 File format (all offsets absolute, little-endian):
@@ -38,20 +38,16 @@ WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 # (down to MIN_SQUEEZE of its width), then made smaller.
 GROUPS = [
     ("time", DIGITS + ":", "8", 70, [(d, 41) for d in DIGITS]),
-    # (Also the day of the month beside it, at the same size: "MON 05" must fit before the indicators.)
+    # (Also the day of the month beside it, at the same size: "MON 05" must fit before the weather.)
     ("weekday", "ADEFHIMNORSTUW" + DIGITS, "M", 24, [(w, 64) for w in WEEKDAYS] + [("WED30", 92)]),
     ("date", DIGITS + "-", "8", 26, [("00", 30), ("00-00", 110)]),
     ("range", DIGITS + "-", "8", 30, [("88", 34)]),  # (100 and up, or below zero, runs further left)
-    # (Below zero or from 100 up, the watch leaves out the degree mark to keep this size.)
-    ("right", DIGITS + "-°", "8", 36, [("88°", 66), ("-88", 66), ("188", 66)]),
-    # (With the digits and % for the chance of rain, e.g. 40%; sized by the letters, as before.)
-    ("label", "BCDEFGHILMOPSTU0123456789%-", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
+    ("label", "BCDEFGHILMOPSTU", "M", 10, [("MUTE", 36), ("FULL", 36), ("CHG", 37), ("DST", 35)]),
 ]
 # Output name -> (the start of its file's name, its variable-font axis settings, or None).
 # Most digit style fonts (Angular, Bebas Neue, Teko, Squada One, Quantico) are condensed enough
 # to fill the 7-segment digits' cells; Orbitron, a wide font, is narrowed, then made smaller.
 FONTS = {
-    "saira": ("sairaextracondensed", None),    # only lends its degree mark, below
     "iceberg": ("iceberg", None),
     "bebas": ("bebasneue", None),
     "quantico": ("quantico", None),
@@ -66,9 +62,8 @@ OUTPUT = ["iceberg", "bebas", "quantico", "teko", "orbitron", "squada"]  # the d
 # The small indicator labels: condensed letters are hard to read at 10 px, so they all come
 # from Oxanium.
 LABEL_FONT = {name: "oxanium" for name in OUTPUT}
-# Characters taken from another font: Iceberg's degree mark sits above its digits, where the
-# glyphs are cut off.
-CHAR_FONT = {"iceberg": {"\u00b0": "saira"}}
+# Characters taken from another font (none at the moment): {output name: {char: font}}.
+CHAR_FONT = {}
 # bezel.bin: the top and bottom bezels' text (main.c's BezelGroup), capitals 13 (and 11, 9, 10) px tall,
 # with every character an upper-cased custom text may use (anything else falls back to the
 # system font). Its glyphs also reach below the baseline (commas, brackets).

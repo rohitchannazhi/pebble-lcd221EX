@@ -30,3 +30,4 @@ Changed: clearer indicator labels (Barlow Semi Condensed in the segment styles, 
 New: Night digit style: any digit style for night mode (Same as day keeps the day's, with 7-segment instead of the dotted styles).
 Changed: the chance of rain moved from the indicators to the bottom bezel: a pill with a raindrop and the percentage in the label's place while rain is possible (above 0%).
 Changed: in 12-hour time PM is an indicator of its own (under CHG), lit after noon; the P beside the clock is gone.
+Changed: the weather layout is the only layout: the weather and the temperature next to the weekday, the indicators in the bottom row's right box.
