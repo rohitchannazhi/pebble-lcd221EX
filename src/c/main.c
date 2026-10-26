@@ -130,7 +130,7 @@ enum { WX_NONE = 0, WX_SUN, WX_MOON, WX_PARTLY, WX_PARTLY_NIGHT, WX_CLOUD, WX_RA
 typedef enum {
   COL_CASE, COL_TOP_LEFT, COL_TOP_RIGHT, COL_BADGE, COL_HEART, COL_LABEL,  // case and what is printed on it
   COL_EDGE, COL_LCD, COL_UNLIT,                                            // the LCD window
-  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row (COL_FRAME, COL_SIG: unused; COL_MUTE: the chance of rain)
+  COL_WEEKDAY, COL_FRAME, COL_BT, COL_CHG, COL_SIG, COL_MUTE,              // top row (COL_FRAME, COL_SIG, COL_MUTE: unused)
   COL_HOURS, COL_COLON, COL_MINUTES, COL_PM,                               // the time
   COL_DST, COL_DATE, COL_RULES, COL_RIGHT,                                 // bottom row of the LCD
   COL_COUNT
@@ -1942,6 +1942,34 @@ static void draw_sun_event(GContext *ctx, int left, int right) {
 }
 
 // Bottom bezel: a heart and the latest heart rate, the next sunrise or sunset, and the custom label.
+// The chance of rain in the next hour on the bottom bezel, in the label's place, while it is above
+// 0% (and the weather recent): a pill in the label's colour with a raindrop and the percentage,
+// in the bezel font's smaller size. Returns its left edge, or 0 if not drawn.
+static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r);
+static int draw_rain_pill(GContext *ctx) {
+  static const char *const DROP[] = { "...#...", "..###..", ".#####.", ".#####.", "#######", "#######", "#######",
+                                      ".#####.", "..###.." };
+  if (!s_settings.show_rain || s_weather.rain <= 1 || !weather_valid()) return 0;
+  char text[6];
+  snprintf(text, sizeof(text), "%d%%", s_weather.rain - 1);
+  enum { DROP_W = 7, PAD = 5, GAP = 3, H = 17, R = 5 };
+  const int tw = bezel_text_width(BG_SMALL, text), w = PAD + DROP_W + GAP + tw + PAD;
+  const int x = 190 - w, y = PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - H) / 2;
+  const GColor pill = s_col[COL_LABEL], ink = is_dark(pill) ? GColorWhite : GColorBlack;
+  if (!(s_fb = graphics_capture_frame_buffer(ctx))) return 0;
+  for (int yy = y; yy < y + H; yy++) {
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
+    for (int xx = x; xx < x + w; xx++) {
+      if (in_round_rect(xx, yy, x, y, w, H, R)) row.data[xx] = pill.argb;
+    }
+  }
+  bezel_draw_text_on(BG_SMALL, text, x + PAD + DROP_W + GAP, y + (H - BEZEL_CAP[BG_SMALL]) / 2, ink, pill, DENSITY_FULL);
+  graphics_release_frame_buffer(ctx, s_fb);
+  s_fb = NULL;
+  draw_icon(ctx, x + PAD, y + (H - (int)ARRAY_LENGTH(DROP)) / 2, DROP, ARRAY_LENGTH(DROP), ink);
+  return x;
+}
+
 static void draw_bottom_bezel(GContext *ctx) {
   static const char *const HEART[] = {
     "..###...###..", ".#####.#####.", "#############", "#############", "#############",
@@ -1954,13 +1982,16 @@ static void draw_bottom_bezel(GContext *ctx) {
   // Both texts 13 px tall, or both 11 px when the label doesn't fit at 13.
   const BezelGroup g = bezel_fits(BG_NORMAL, s_settings.bezel_label, 120) ? BG_NORMAL : BG_SMALL;
   draw_bezel_text(ctx, BAR_BOTTOM, g, hr_text, 30, 40, GTextAlignmentLeft, s_col[COL_HEART]);
-  draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
-  if (s_settings.show_sun) draw_sun_event(ctx, 30 + bezel_width(g, hr_text, 40),
-                                          190 - bezel_width(g, s_settings.bezel_label, 120));
+  // The label, or while rain is possible in the next hour the chance of rain in its place.
+  int label_left = draw_rain_pill(ctx);
+  if (!label_left) {
+    draw_bezel_text(ctx, BAR_BOTTOM, g, s_settings.bezel_label, 70, 120, GTextAlignmentRight, s_col[COL_LABEL]);
+    label_left = 190 - bezel_width(g, s_settings.bezel_label, 120);
+  }
+  if (s_settings.show_sun) draw_sun_event(ctx, 30 + bezel_width(g, hr_text, 40), label_left);
 }
 
-#define INDICATORS 4  // BT, CHG (or PM), DST and the chance of rain
-#define RAIN_LIT 50   // the chance of rain (percent) from which its indicator is lit
+#define INDICATORS 3  // BT, CHG (or PM) and DST
 
 // One indicator: its label (NULL: not shown in this layout), whether it is on, and its colour when on.
 typedef struct {
@@ -2099,9 +2130,8 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define SMALL_PILL_GAP_X 4
 #define SMALL_PILL_GAP_Y 2
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // BT and DST on the right, CHG (or PM) and the chance of rain on the left (CHG level with the
-  // middle of the two without it). The weather layout's bottom box has the same 2x2 grid, in
-  // SMALL_PILL_W x SMALL_PILL_H pills.
+  // BT and DST on the right, CHG (or PM) on the left, level with the middle of the two; in the
+  // weather layout's bottom box the same, in SMALL_PILL_W x SMALL_PILL_H pills.
   const bool wx = s_settings.weather_box;
   const int pw = wx ? SMALL_PILL_W : PILL_W, ph = wx ? SMALL_PILL_H : PILL_H, pr = wx ? SMALL_PILL_R : PILL_R;
   const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - SMALL_PILL_GAP_X) / 2;
@@ -2109,10 +2139,9 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   const int right_x = wx ? gx + SMALL_PILL_W + SMALL_PILL_GAP_X : 44, left_x = wx ? gx : 1;
   const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + SMALL_PILL_GAP_Y : 15;
   const uint8_t SLOT[INDICATORS][2] = {
-    { right_x, top_y },                                     // BT
-    { left_x, wx || ind[3].label ? top_y : 7 },             // CHG / PM
-    { right_x, bottom_y },                                  // DST
-    { left_x, bottom_y },                                   // the chance of rain
+    { right_x, top_y },                        // BT
+    { left_x, (top_y + bottom_y) / 2 },        // CHG / PM
+    { right_x, bottom_y },                     // DST
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
@@ -2172,8 +2201,8 @@ static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
   }
 }
 
-// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM), the chance of rain (a
-// raindrop, lit from RAIN_LIT) and daylight saving time (the sun). Faint dots when off.
+// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM) and daylight saving time
+// (the sun). Faint dots when off.
 static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density) {
   for (int r = 0; r < 2 * n; r++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y + r);
@@ -2191,22 +2220,17 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
   static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
   static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
                                      "..#####..", "...###...", ".#.....#.", "....#...." };
-  static const char *const DROP[] = { "...#...", "..###..", ".#####.", ".#####.", "#######", "#######", "#######",
-                                      ".#####.", "..###.." };
-  // In the weather layout BT, the raindrop and the sun side by side in the bottom box (above PM, if shown).
-  const bool wx = s_settings.weather_box, rain = ind[3].label != NULL;
+  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown).
+  const bool wx = s_settings.weather_box;
   const int top = wx ? IND_Y0 + (pm_cell ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
   struct { const char *const *rows; int n; int x; int ind; } icon[] = {
-    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? (rain ? 8 : 16) : rain ? 3 : 10), 0 },
-    { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + (rain ? 21 : 36), 1 },
-    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? (rain ? 48 : 38) : rain ? 63 : 60), 2 },
-    { DROP, ARRAY_LENGTH(DROP), IND_X0 + (wx ? 26 : 41), 3 },
+    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : 10), 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 36, 1 },
+    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : 60), 2 },
   };
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
     const Indicator *it = &ind[icon[k].ind];
     if (k == 1 && (pm_cell || wx)) continue;  // PM is a label, drawn below; no CHG in the weather layout
-    if (k == 3 && !rain) continue;
     if (!it->on && !s_settings.ghosts) continue;
     draw_icon_2x(icon[k].x, top + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
                  it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
@@ -2226,12 +2250,8 @@ static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
   const bool pm_cell = !is_24h() && s_settings.pm_in_box && !s_settings.weather_box;  // (weather: the P)
-  // The chance of rain in the next hour (while the weather is recent), lit from RAIN_LIT.
-  static char rain_text[6];
-  const bool rain_known = s_weather.rain > 0 && weather_valid();
-  if (rain_known) snprintf(rain_text, sizeof(rain_text), "%d%%", s_weather.rain - 1);
-  else snprintf(rain_text, sizeof(rain_text), "--%%");
-  // In the order BT, CHG (or PM), DST, the chance of rain. (Quiet Time is shown by the colon: a line.)
+  // In the order BT, CHG (or PM), DST. (Quiet Time is shown by the colon: a line; the chance of
+  // rain is on the bottom bezel.)
   const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
     // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
@@ -2239,7 +2259,6 @@ static void draw_indicators(GContext *ctx) {
     { pm_cell ? "PM" : full ? "FULL" : "CHG",
       pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full, pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
     { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
-    { s_settings.show_rain ? rain_text : NULL, rain_known && s_weather.rain - 1 >= RAIN_LIT, s_col[COL_MUTE] },
   };
   switch (s_settings.indicator_style) {
     case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
