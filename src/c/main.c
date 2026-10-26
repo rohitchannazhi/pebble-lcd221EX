@@ -841,12 +841,14 @@ static bool night_now(void) {
   return s_settings.night_mode && sun_is_down(time(NULL), &night) && night;
 }
 
-// The night colours: black on a white LCD and a white case (the unlit segments white too, so not
-// shown), with a red heart, dark gray lines and window edge, a light blue BT and an amber DST. (The
-// digit style stays the day's.)
+// The night colours: black on a white LCD (the unlit segments white too, so not shown) in a light
+// gray case, with red minutes and heart, dark gray lines and window edge, a light blue BT and an
+// amber DST.
 static void use_night_colors(void) {
   for (int i = 0; i < COL_COUNT; i++) s_col[i] = GColorBlack;
-  s_col[COL_CASE] = s_col[COL_LCD] = GColorWhite;
+  s_col[COL_CASE] = GColorLightGray;
+  s_col[COL_LCD] = GColorWhite;
+  s_col[COL_MINUTES] = GColorFromHEX(0xFF0000);
   s_col[COL_UNLIT] = GColorWhite;  // no unlit segments or faint labels at night
   s_col[COL_BADGE] = GColorFromHEX(0xFF0000);
   s_col[COL_EDGE] = s_col[COL_RULES] = GColorDarkGray;

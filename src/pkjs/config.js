@@ -147,7 +147,7 @@ module.exports = [
       {
         "type": "toggle", "messageKey": "NightMode", "label": "Night mode",
         "defaultValue": false,
-        "description": "From sunset to sunrise (the times come with the weather): a white case and LCD, black text (no unlit segments), a red heart, dark gray lines, a light blue BT and an amber DST, in the Night digit style below. Custom colors and Inverted colors apply in the day."
+        "description": "From sunset to sunrise (the times come with the weather): a light gray case, a white LCD, black text (no unlit segments), red minutes and heart, dark gray lines, a light blue BT and an amber DST, in the Night digit style below. Custom colors and Inverted colors apply in the day."
       },
       {
         "type": "select", "messageKey": "NightDigits", "label": "Night digit style", "defaultValue": "day",
