@@ -11,7 +11,7 @@
 // File map (search for the "----" section banners):
 //   raster primitives  span/fill and the ghost dither
 //   7-segment digits   polygon fill, digits (outlines: segments.h)
-//   dot-matrix glyphs  weekday letters, PM marker, small symbols
+//   dot-matrix glyphs  weekday letters, small symbols
 //   data helpers       weather, steps, heart rate, theme, backlight
 //   drawing            layout constants, text helpers, one function per screen area
 //   services           ticks, battery, Bluetooth vibration, phone messages
@@ -74,7 +74,7 @@ typedef struct {
   // Time & date
   uint8_t time_format;         // FORMAT_AUTO follows the watch's 12/24-hour setting
   bool hour_no_zero;           // 24-hour time has no leading zero (7:05, like the original)
-  bool pm_in_box;              // 12-hour time has a leading zero and PM moves into the indicators
+  bool pm_in_box;              // 12-hour time has a leading zero (07:05)
   uint8_t range_marks;         // MARKS_TALL, MARKS_TRIANGLES or MARKS_LOHI: what marks the low and the high
   uint8_t temp_unit;           // UNIT_AUTO follows the watch's measurement system
   // Top bezel
@@ -448,37 +448,6 @@ static const char *day_glyph(char ch) {
     default:  return NULL;
   }
 }
-
-// The "P" (PM) marker: an 11x14 LCD symbol with a square-ish bowl (corners cut by a dot)
-// and a straight stem.
-static const char PM_BITS[] =
-  "#########.."
-  "###########"
-  "###.....###"
-  "###.....###"
-  "###.....###"
-  "###.....###"
-  "###########"
-  "#########.."
-  "###........"
-  "###........"
-  "###........"
-  "###........"
-  "###........"
-  "###........";
-
-// A smaller P (7x10, as wide as the colon's dots), for between the colon's dots.
-static const char PM_SMALL_BITS[] =
-  "######."
-  "#######"
-  "##...##"
-  "##...##"
-  "#######"
-  "######."
-  "##....."
-  "##....."
-  "##....."
-  "##.....";
 
 // Draws a grid of `cols` x `rows` dots. With `on` false, the '#' dots are drawn
 // as ghosts instead (an unlit fixed LCD symbol).
@@ -927,15 +896,11 @@ _Static_assert(LCD_Y + LCD_H + 2 + BEZEL_H == PBL_DISPLAY_HEIGHT, "the bezels ar
 // Row 2: the time.
 // Proportions measured on the W-221H: the time is ~41% of the LCD height and sits
 // just above the rule, and its digits are spread across nearly the whole width: the first digit's box starts about
-// 4px from the edge, with the PM marker in the empty left part of that box. (The
-// original's marker starts level with the digits and 6px from the edge; here it is
-// nudged up and in a little.)
+// 4px from the edge. (The original's PM marker, in the empty left part of that box, is an
+// indicator here.)
 #define TIME_Y 78
 #define TIME_W 35
 #define TIME_H 70
-#define PM_X 7    // the PM marker's distance from the LCD's left edge
-#define PM_DY -2  // and how many rows it sits above the top of the digits
-#define PM_IN_DY 12  // the weather layout's P: inside the first digit's upper half, this far below its top
 // (A font's or the dot matrix's leading 0 has no room inside: the P is between the colon's dots then.)
 
 // Row 3: today's low and high (left) and the temperature (right), under a 2px rule.
@@ -1212,11 +1177,10 @@ static int display_temp(int t10) {
   return (t10 + (t10 >= 0 ? 5 : -5)) / 10;
 }
 
-// The big time, with the PM marker.
+// The big time.
 static void draw_time(void) {
   bool is24 = is_24h();
   int hour = s_now.tm_hour;
-  bool pm = hour >= 12;
   if (!is24) {
     hour %= 12;
     if (hour == 0) hour = 12;
@@ -1228,34 +1192,9 @@ static void draw_time(void) {
   // The font styles' glyphs sit FONT_TIME_DX right of the boxes' centres, which centres the time
   // on the screen.
   enum { FONT_TIME_DX = 3 };
-  // AM/PM only in 12-hour mode: the P beside the hours, or PM in the indicator box (pm_in_box).
-  // In the weather layout the P is always there, inside the first digit (its 0's upper half), or
-  // with a font's or the dot matrix's leading 0, between the colon's two dots (during Quiet Time,
-  // when the colon is a line, below it).
+  // (PM is an indicator: see draw_indicators.)
   const bool zero12 = !is24 && s_settings.pm_in_box;
-  if (!is24 && s_settings.weather_box) {
-    if (zero12 && (font_active() || s_matrix)) {
-      // The colon's dots (see below): the gap between them, and the bottom of the second.
-      int cx = colon_x + 3, gap0 = ty + th * 36 / 100 + 4, gap1 = ty + th * 70 / 100 - 4;
-      int dot_bottom = ty + th * 70 / 100 + 4 + QUIET_LINE_EXTRA;
-      int top, bottom, g0, g1;
-      if (font_active() && font_colon_rows(&top, &bottom, &g0, &g1) && g0 >= 0) {
-        const int glyph_top = ty + (th - font_height(FG_TIME)) / 2;
-        cx = (X[1] + X[2] + tw) / 2 + FONT_TIME_DX;
-        gap0 = glyph_top + g0;
-        gap1 = glyph_top + g1;
-        dot_bottom = glyph_top + bottom + 1 + QUIET_LINE_EXTRA;
-      }
-      int py = s_quiet ? dot_bottom + 2 : (gap0 + gap1 + 1) / 2 - 5;
-      if (py > ROW3_LINE_Y - 3 - 10) py = ROW3_LINE_Y - 3 - 10;  // clear of the divider
-      draw_dots(cx - 3, py, PM_SMALL_BITS, 7, 10, 1, 1, pm, s_col[COL_PM]);
-    } else {
-      draw_dots(6 + (TIME_W - 11) / 2, ty + PM_IN_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
-    }
-  } else if (!is24 && !zero12) {
-    draw_dots(PM_X, ty + PM_DY, PM_BITS, 11, 14, 1, 1, pm, s_col[COL_PM]);
-  }
-  // 12-hour: the first digit is blank or a 1 (the P sits where a 0 would be). 24-hour: the
+  // 12-hour: the first digit is blank or a 1 (or with the leading zero, 0 or 1). 24-hour: the
   // leading zero is optional.
   int tens = (hour >= 10 || (is24 && !s_settings.hour_no_zero) || zero12) ? hour / 10 : DIGIT_BLANK;
   if (font_active()) {
@@ -1274,12 +1213,11 @@ static void draw_time(void) {
   }
   if (is24 || zero12) {
     draw_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS]);
-  } else if (s_matrix) {  // just the 1, clear of the PM marker
+  } else if (s_matrix) {  // just the 1
     draw_matrix_digit(X[0], ty, tw, th, tens, s_col[COL_HOURS], false);
   } else {
     // In 12-hour mode the first digit can only be a 1 (or blank), so it only has
-    // the two right-hand segments, as on the real watch. This also keeps the PM
-    // marker clear of an unlit digit.
+    // the two right-hand segments, as on the real watch.
     draw_segments(X[0], ty, tw, th, tens == 1 ? SEG_B | SEG_C : 0, SEG_B | SEG_C, s_col[COL_HOURS]);
   }
   draw_digit(X[1], ty, tw, th, hour % 10, s_col[COL_HOURS]);
@@ -1993,7 +1931,7 @@ static void draw_bottom_bezel(GContext *ctx) {
   if (s_settings.show_sun) draw_sun_event(ctx, 30 + bezel_width(g, hr_text, 40), label_left);
 }
 
-#define INDICATORS 3  // BT, CHG (or PM) and DST
+#define INDICATORS 4  // BT, CHG, DST and (in 12-hour time) PM
 
 // One indicator: its label (NULL: not shown in this layout), whether it is on, and its colour when on.
 typedef struct {
@@ -2132,8 +2070,9 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define SMALL_PILL_GAP_X 4
 #define SMALL_PILL_GAP_Y 2
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // BT and DST on the right, CHG (or PM) on the left, level with the middle of the two; in the
-  // weather layout's bottom box the same, in SMALL_PILL_W x SMALL_PILL_H pills.
+  // BT and DST on the right, CHG and PM on the left (in 24-hour time CHG alone, level with the
+  // middle of the two); in the weather layout's bottom box the same, in SMALL_PILL_W x SMALL_PILL_H
+  // pills.
   const bool wx = s_settings.weather_box;
   const int pw = wx ? SMALL_PILL_W : PILL_W, ph = wx ? SMALL_PILL_H : PILL_H, pr = wx ? SMALL_PILL_R : PILL_R;
   const int gx = (IND_BOTTOM_W - 2 * SMALL_PILL_W - SMALL_PILL_GAP_X) / 2;
@@ -2141,9 +2080,10 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   const int right_x = wx ? gx + SMALL_PILL_W + SMALL_PILL_GAP_X : 44, left_x = wx ? gx : 1;
   const int top_y = wx ? gy : 0, bottom_y = wx ? gy + SMALL_PILL_H + SMALL_PILL_GAP_Y : 15;
   const uint8_t SLOT[INDICATORS][2] = {
-    { right_x, top_y },                        // BT
-    { left_x, (top_y + bottom_y) / 2 },        // CHG / PM
-    { right_x, bottom_y },                     // DST
+    { right_x, top_y },                                          // BT
+    { left_x, ind[3].label ? top_y : (top_y + bottom_y) / 2 },   // CHG
+    { right_x, bottom_y },                                       // DST
+    { left_x, bottom_y },                                        // PM
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
@@ -2203,8 +2143,8 @@ static void draw_indicator_active(GContext *ctx, const Indicator *ind) {
   }
 }
 
-// Icons (double-size pixel art), in one row: Bluetooth, charging (or PM) and daylight saving time
-// (the sun). Faint dots when off.
+// Icons (double-size pixel art), in one row: Bluetooth, charging and daylight saving time (the
+// sun), then PM as a label in 12-hour time. Faint dots when off.
 static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c, int density) {
   for (int r = 0; r < 2 * n; r++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, y + r);
@@ -2217,31 +2157,33 @@ static void draw_icon_2x(int x, int y, const char *const *rows, int n, GColor c,
   }
 }
 
-static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_cell) {
+static void draw_indicator_icons(GContext *ctx, const Indicator *ind) {
   static const char *const BT[] = { "..#..", "..##.", "#.#.#", ".###.", "..#..", ".###.", "#.#.#", "..##.", "..#.." };
   static const char *const BOLT[] = { "...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..." };
   static const char *const SUN[] = { "....#....", ".#.....#.", "...###...", "..#####..", "#.#####.#",
                                      "..#####..", "...###...", ".#.....#.", "....#...." };
-  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown).
-  const bool wx = s_settings.weather_box;
-  const int top = wx ? IND_Y0 + (pm_cell ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
+  // In the weather layout BT and the sun side by side in the bottom box (above PM, if shown); PM
+  // after the sun otherwise.
+  const bool wx = s_settings.weather_box, pm = ind[3].label != NULL;
+  const int top = wx ? IND_Y0 + (pm ? 4 : (IND_BOTTOM_H - 18) / 2) : IND_Y0 + 5;  // the icons' 18 px row
   struct { const char *const *rows; int n; int x; int ind; } icon[] = {
-    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : 10), 0 }, { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + 36, 1 },
-    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : 60), 2 },
+    { BT, ARRAY_LENGTH(BT), IND_X0 + (wx ? 16 : pm ? 3 : 10), 0 },
+    { BOLT, ARRAY_LENGTH(BOLT), IND_X0 + (pm ? 20 : 36), 1 },
+    { SUN, ARRAY_LENGTH(SUN), IND_X0 + (wx ? 38 : pm ? 36 : 60), 2 },
   };
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return;
   for (unsigned k = 0; k < ARRAY_LENGTH(icon); k++) {
     const Indicator *it = &ind[icon[k].ind];
-    if (k == 1 && (pm_cell || wx)) continue;  // PM is a label, drawn below; no CHG in the weather layout
+    if (k == 1 && wx) continue;  // no bolt in the weather layout (the battery icon's shows charging)
     if (!it->on && !s_settings.ghosts) continue;
     draw_icon_2x(icon[k].x, top + (18 - 2 * icon[k].n) / 2, icon[k].rows, icon[k].n,
                  it->on ? it->ink : s_ghost, it->on ? DENSITY_FULL : s_label_off_density);
   }
   graphics_release_frame_buffer(ctx, s_fb);
   s_fb = NULL;
-  if (pm_cell && (ind[1].on || s_settings.ghosts)) {
-    const GRect cell = wx ? GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H) : GRect(IND_X0 + 24, IND_Y0 + 9, 24, LABEL_H);
-    draw_indicator_label(ctx, &ind[1], cell, ALIGN_CENTER);
+  if (pm && (ind[3].on || s_settings.ghosts)) {
+    const GRect cell = wx ? GRect(IND_X0 + 24, IND_Y0 + 30, 24, LABEL_H) : GRect(IND_X0 + 58, IND_Y0 + 9, 26, LABEL_H);
+    draw_indicator_label(ctx, &ind[3], cell, ALIGN_CENTER);
   }
 }
 
@@ -2251,20 +2193,17 @@ static void draw_indicator_icons(GContext *ctx, const Indicator *ind, bool pm_ce
 static void draw_indicators(GContext *ctx) {
   // On the charger but no longer charging: the battery is full.
   const bool full = s_battery.is_plugged && !s_battery.is_charging;
-  const bool pm_cell = !is_24h() && s_settings.pm_in_box && !s_settings.weather_box;  // (weather: the P)
-  // In the order BT, CHG (or PM), DST. (Quiet Time is shown by the colon: a line; the chance of
-  // rain is on the bottom bezel.)
+  // In the order BT, CHG, DST, PM (12-hour time only). (Quiet Time is shown by the colon: a line;
+  // the chance of rain is on the bottom bezel.)
   const Indicator ind[INDICATORS] = {
     { "BT",   s_connected, s_col[COL_BT] },
-    // With the leading zero in 12-hour time, PM takes CHG's place (the battery icon shows charging).
-    // (In the weather layout's Icons style there is no bolt: the battery icon's shows charging.)
-    { pm_cell ? "PM" : full ? "FULL" : "CHG",
-      pm_cell ? s_now.tm_hour >= 12 : s_battery.is_charging || full, pm_cell ? s_col[COL_PM] : s_col[COL_CHG] },
+    { full ? "FULL" : "CHG", s_battery.is_charging || full, s_col[COL_CHG] },
     { "DST",  s_now.tm_isdst > 0, s_col[COL_DST] },
+    { is_24h() ? NULL : "PM", s_now.tm_hour >= 12, s_col[COL_PM] },
   };
   switch (s_settings.indicator_style) {
     case IND_ACTIVE: draw_indicator_active(ctx, ind); break;
-    case IND_ICONS:  draw_indicator_icons(ctx, ind, pm_cell); break;
+    case IND_ICONS:  draw_indicator_icons(ctx, ind); break;
     default:         draw_indicator_pills(ctx, ind);
   }
 }

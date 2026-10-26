@@ -49,7 +49,7 @@ module.exports = [
       },
       {
         "type": "toggle", "messageKey": "TimeZero12", "label": "Leading zero in 12-hour time", "defaultValue": false,
-        "description": "Shows 07:05 instead of 7:05. The P beside the hours makes way: PM is shown with the indicators instead, in place of CHG (the battery icon shows a bolt while charging)."
+        "description": "Shows 07:05 instead of 7:05."
       },
       {
         "type": "select", "messageKey": "RangeMarks", "label": "Min / max marks", "defaultValue": "tall",
@@ -208,7 +208,7 @@ module.exports = [
       },
       {
         "type": "select", "messageKey": "IndicatorStyle", "label": "Indicators", "defaultValue": "pills",
-        "description": "How BT, CHG and DST are shown next to the weekday. During Quiet Time the colon of the time is a line.",
+        "description": "How BT, CHG, DST and (in 12-hour time) PM are shown next to the weekday. During Quiet Time the colon of the time is a line.",
         "options": [
           { "label": "Pills", "value": "pills" },
           { "label": "Active only", "value": "active" },
@@ -289,7 +289,7 @@ module.exports = [
       colorItem("ColHours", "Hour digits", "000000"),
       colorItem("ColColon", "Colon", "000000"),
       colorItem("ColMinutes", "Minute digits", "000000"),
-      colorItem("ColPm", "PM marker", "000000"),
+      colorItem("ColPm", "PM", "000000"),
       colorHeading("Bottom row"),
       colorItem("ColDate", "Low / high temperature", "000000"),
       colorItem("ColRules", "Divider lines", "000000"),

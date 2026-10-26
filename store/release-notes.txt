@@ -29,3 +29,4 @@ New: the chance of rain in the next hour as an indicator (e.g. 40%), lit from 50
 Changed: clearer indicator labels (Barlow Semi Condensed in the segment styles, and no gray fringes inside lit pills).
 New: Night digit style: any digit style for night mode (Same as day keeps the day's, with 7-segment instead of the dotted styles).
 Changed: the chance of rain moved from the indicators to the bottom bezel: a pill with a raindrop and the percentage in the label's place while rain is possible (above 0%).
+Changed: in 12-hour time PM is an indicator of its own (under CHG), lit after noon; the P beside the clock is gone.
