@@ -1836,7 +1836,10 @@ static int draw_rain_pill(GContext *ctx) {
   enum { DROP_W = 7, PAD = 5, GAP = 3, H = 17, R = 5 };
   const int tw = bezel_text_width(BG_SMALL, text), w = PAD + DROP_W + GAP + tw + PAD;
   const int x = 190 - w, y = PBL_DISPLAY_HEIGHT - BEZEL_H + (BEZEL_H - H) / 2;
-  const GColor pill = s_col[COL_LABEL], ink = is_dark(pill) ? GColorWhite : GColorBlack;
+  // Its text as on a lit indicator pill: black, except in a pill darker than dark gray, where it is
+  // the case's colour, or white on a dark case.
+  const GColor pill = s_col[COL_LABEL], bg = s_col[COL_CASE];
+  const GColor ink = pill_is_dark(pill) ? (pill_is_dark(bg) ? GColorWhite : bg) : GColorBlack;
   if (!(s_fb = graphics_capture_frame_buffer(ctx))) return 0;
   for (int yy = y; yy < y + H; yy++) {
     GBitmapDataRowInfo row = gbitmap_get_data_row_info(s_fb, yy);
@@ -1995,8 +1998,8 @@ static bool in_round_rect(int px, int py, int x, int y, int w, int h, int r) {
 #define PILL_GAP_X 4
 #define PILL_GAP_Y 2
 static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
-  // BT and DST on the right, CHG and PM on the left (in 24-hour time CHG alone, level with the
-  // middle of the two).
+  // CHG and BT on top, DST and PM below (in 24-hour time, with no PM, DST under BT and CHG alone
+  // on the left, level with the middle of the two).
   const int pw = PILL_W, ph = PILL_H, pr = PILL_R;
   const int gx = (IND_W - 2 * PILL_W - PILL_GAP_X) / 2, gy = (IND_H - 2 * PILL_H - PILL_GAP_Y) / 2;
   const int right_x = gx + PILL_W + PILL_GAP_X, left_x = gx;
@@ -2004,8 +2007,8 @@ static void draw_indicator_pills(GContext *ctx, const Indicator *ind) {
   const uint8_t SLOT[INDICATORS][2] = {
     { right_x, top_y },                                          // BT
     { left_x, ind[3].label ? top_y : (top_y + bottom_y) / 2 },   // CHG
-    { right_x, bottom_y },                                       // DST
-    { left_x, bottom_y },                                        // PM
+    { ind[3].label ? left_x : right_x, bottom_y },               // DST
+    { right_x, bottom_y },                                       // PM
   };
   for (int i = 0; i < INDICATORS; i++) {
     if (!ind[i].label || (!ind[i].on && !s_settings.ghosts)) continue;
